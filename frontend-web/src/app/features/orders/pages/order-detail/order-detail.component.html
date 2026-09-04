@@ -1,0 +1,29 @@
+<main class="detail-page">
+  @if (isLoading) {
+    <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pedido...</span></div>
+  } @else if (isNotFound) {
+    <mat-card class="empty-state">El pedido solicitado no existe o no está disponible.</mat-card>
+  } @else if (order) {
+    <header class="detail-header">
+      <p>PEDIDO #{{ order.id_pedido }}</p>
+      <h1>{{ order.estado }}</h1>
+      <span>{{ order.fecha_pedido | date:'dd/MM/yyyy, HH:mm' }}</span>
+    </header>
+
+    <section class="detail-layout">
+      <mat-card>
+        <mat-card-header><mat-card-title>Productos</mat-card-title></mat-card-header>
+        <mat-card-content>
+          @for (detail of order.detalles; track $index) {
+            <div class="detail-item">
+              <span>{{ detail.producto }} · {{ detail.talla }} · {{ detail.color }}</span>
+              <span>{{ detail.cantidad }} x {{ detail.precio_unitario | currency:'BOB':'symbol-narrow':'1.2-2' }}</span>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="total-card"><mat-card-content><span>Total</span><strong>{{ order.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong><button mat-flat-button color="primary" type="button" (click)="payOrder()">Pagar pedido</button></mat-card-content></mat-card>
+    </section>
+  }
+</main>

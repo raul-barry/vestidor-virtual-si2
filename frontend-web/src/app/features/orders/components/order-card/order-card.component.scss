@@ -1,0 +1,35 @@
+.order-card {
+  border-left: 3px solid #4f46e5;
+}
+
+mat-card-content {
+  align-items: start;
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.eyebrow {
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.35rem;
+}
+
+h3 {
+  color: #172554;
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.status {
+  color: #0f766e;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+strong {
+  color: #0f766e;
+  font-size: 1.15rem;
+}

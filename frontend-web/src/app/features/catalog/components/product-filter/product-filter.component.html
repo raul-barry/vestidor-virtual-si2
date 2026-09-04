@@ -1,0 +1,49 @@
+<form class="filter-form" [formGroup]="filterForm" (ngSubmit)="submit()">
+  <mat-form-field appearance="outline">
+    <mat-label>Buscar prenda</mat-label>
+    <input matInput formControlName="nombre" placeholder="Ej. camisa" />
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Categoría</mat-label>
+    <mat-select formControlName="categoria">
+      <mat-option value="">Todas</mat-option>
+      @for (categoria of categorias; track categoria) {
+        <mat-option [value]="categoria">{{ categoria }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Talla</mat-label>
+    <mat-select formControlName="talla">
+      <mat-option value="">Todas</mat-option>
+      @for (talla of tallas; track talla) {
+        <mat-option [value]="talla">{{ talla }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Color</mat-label>
+    <mat-select formControlName="color">
+      <mat-option value="">Todos</mat-option>
+      @for (color of colores; track color) {
+        <mat-option [value]="color">{{ color }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Precio máximo</mat-label>
+    <input matInput type="number" min="0.01" formControlName="precio_max" />
+    @if (filterForm.controls.precio_max.hasError('min')) {
+      <mat-error>Ingresa un precio mayor a cero.</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="filter-actions">
+    <button mat-flat-button color="primary" type="submit">Buscar</button>
+    <button mat-button type="button" (click)="clear()">Limpiar filtros</button>
+  </div>
+</form>

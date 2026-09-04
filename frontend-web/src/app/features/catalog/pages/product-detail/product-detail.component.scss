@@ -1,0 +1,52 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.detail-page {
+  background: #f8fafc;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.detail-header,
+.detail-grid {
+  margin: 0 auto;
+  max-width: 70rem;
+}
+
+.detail-header {
+  margin-bottom: 2rem;
+}
+
+.detail-header p {
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  color: #172554;
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin: 0;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+mat-card-content {
+  padding: 1rem;
+}
+
+.loading-state {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  min-height: 50vh;
+}

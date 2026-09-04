@@ -1,0 +1,18 @@
+<mat-card class="cart-item">
+  <mat-card-content>
+    <div class="item-information">
+      <h3>{{ item.producto }}</h3>
+      <p>{{ item.talla }} · {{ item.color }}</p>
+      <strong>{{ item.precio_unitario | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+    </div>
+
+    <div class="item-actions">
+      <div class="quantity-controls">
+        <button mat-icon-button type="button" [disabled]="item.cantidad <= 1" (click)="decrease()">−</button>
+        <span>{{ item.cantidad }}</span>
+        <button mat-icon-button type="button" (click)="increase()">+</button>
+      </div>
+      <button mat-button color="warn" type="button" (click)="itemRemoved.emit()">Eliminar</button>
+    </div>
+  </mat-card-content>
+</mat-card>

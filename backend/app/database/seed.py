@@ -1,0 +1,218 @@
+from collections.abc import Iterable
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+import app.models  # noqa: F401  # Ensure all relationships are registered before seeding.
+from app.core.security import hash_password
+from app.database.database import SessionLocal
+from app.models.categoria import Categoria
+from app.models.cliente import Cliente
+from app.models.color import Color
+from app.models.inventario import Inventario
+from app.models.producto import Producto
+from app.models.producto_variante import ProductoVariante
+from app.models.rol import Rol
+from app.models.sucursal import Sucursal
+from app.models.talla import Talla
+from app.models.usuario import Usuario
+
+INITIAL_ROLES = ("ADMINISTRADOR", "CLIENTE")
+INITIAL_PASSWORDS = {
+    "admin@vestidor.local": "Admin123!",
+    "cliente@vestidor.local": "Cliente123!",
+}
+INITIAL_CATEGORIES = (
+    ("Camisas", "Camisas masculinas para uso casual y formal."),
+    ("Pantalones", "Pantalones masculinos para vestir y uso diario."),
+    ("Chaquetas", "Chaquetas masculinas para temporada fresca."),
+)
+INITIAL_SIZES = ("M", "L", "XL")
+INITIAL_COLORS = ("Azul", "Negro", "Blanco", "Gris", "Verde")
+INITIAL_BRANCH = ("Sucursal Central", "Av. Principal 100")
+INITIAL_PRODUCTS = (
+    ("Camisa Oxford Azul", "Camisa manga larga de algodon para vestir.", "Camisas", Decimal("189.90"), "Azul"),
+    ("Camisa Casual Blanca", "Camisa ligera para uso diario.", "Camisas", Decimal("159.90"), "Blanco"),
+    ("Pantalon Chino Negro", "Pantalon chino de corte recto.", "Pantalones", Decimal("229.90"), "Negro"),
+    ("Pantalon Jean Gris", "Jean masculino clasico de mezclilla.", "Pantalones", Decimal("249.90"), "Gris"),
+    ("Chaqueta Bomber Verde", "Chaqueta bomber liviana con cierre frontal.", "Chaquetas", Decimal("319.90"), "Verde"),
+)
+
+
+def seed_roles(db: Session, role_names: Iterable[str] = INITIAL_ROLES) -> int:
+    """Insert missing system roles and return the number of created records."""
+    names = tuple(role_names)
+    existing_names = set(db.scalars(select(Rol.nombre).where(Rol.nombre.in_(names))).all())
+    roles_to_create = [Rol(nombre=name) for name in names if name not in existing_names]
+
+    if roles_to_create:
+        db.add_all(roles_to_create)
+        db.flush()
+
+    return len(roles_to_create)
+
+
+def _get_or_create_named(db: Session, model, nombre: str, **values) -> tuple[object, bool]:
+    record = db.scalar(select(model).where(model.nombre == nombre))
+    if record is not None:
+        return record, False
+
+    record = model(nombre=nombre, **values)
+    db.add(record)
+    db.flush()
+    return record, True
+
+
+def _seed_users(db: Session) -> int:
+    roles = {role.nombre: role for role in db.scalars(select(Rol)).all()}
+    created = 0
+
+    admin = db.scalar(select(Usuario).where(Usuario.correo == "admin@vestidor.local"))
+    if admin is None:
+        db.add(
+            Usuario(
+                id_rol=roles["ADMINISTRADOR"].id_rol,
+                nombres="Administrador",
+                apellidos="Vestidor",
+                correo="admin@vestidor.local",
+                telefono=None,
+                password_hash=hash_password(INITIAL_PASSWORDS["admin@vestidor.local"]),
+                estado="ACTIVO",
+            )
+        )
+        created += 1
+
+    client = db.scalar(select(Usuario).where(Usuario.correo == "cliente@vestidor.local"))
+    if client is None:
+        client = Usuario(
+            id_rol=roles["CLIENTE"].id_rol,
+            nombres="Cliente",
+            apellidos="Prueba",
+            correo="cliente@vestidor.local",
+            telefono=None,
+            password_hash=hash_password(INITIAL_PASSWORDS["cliente@vestidor.local"]),
+            estado="ACTIVO",
+        )
+        db.add(client)
+        db.flush()
+        db.add(Cliente(id_usuario=client.id_usuario, estado="ACTIVO"))
+        created += 1
+    elif client.cliente is None:
+        db.add(Cliente(id_usuario=client.id_usuario, estado="ACTIVO"))
+
+    db.flush()
+    return created
+
+
+def _seed_catalog(db: Session) -> dict[str, int]:
+    created = {
+        "categorias": 0,
+        "tallas": 0,
+        "colores": 0,
+        "sucursales": 0,
+        "productos": 0,
+        "variantes": 0,
+        "inventarios": 0,
+    }
+
+    categories: dict[str, Categoria] = {}
+    for name, description in INITIAL_CATEGORIES:
+        category, was_created = _get_or_create_named(db, Categoria, name, descripcion=description)
+        categories[name] = category
+        created["categorias"] += int(was_created)
+
+    sizes: dict[str, Talla] = {}
+    for name in INITIAL_SIZES:
+        size, was_created = _get_or_create_named(db, Talla, name)
+        sizes[name] = size
+        created["tallas"] += int(was_created)
+
+    colors: dict[str, Color] = {}
+    for name in INITIAL_COLORS:
+        color, was_created = _get_or_create_named(db, Color, name)
+        colors[name] = color
+        created["colores"] += int(was_created)
+
+    branch, was_created = _get_or_create_named(
+        db,
+        Sucursal,
+        INITIAL_BRANCH[0],
+        direccion=INITIAL_BRANCH[1],
+        estado="ACTIVA",
+    )
+    created["sucursales"] += int(was_created)
+
+    for product_index, (name, description, category_name, price, color_name) in enumerate(INITIAL_PRODUCTS, start=1):
+        product = db.scalar(select(Producto).where(Producto.nombre == name))
+        if product is None:
+            product = Producto(
+                id_categoria=categories[category_name].id_categoria,
+                nombre=name,
+                descripcion=description,
+                precio_base=price,
+                estado="ACTIVO",
+            )
+            db.add(product)
+            db.flush()
+            created["productos"] += 1
+
+        for size_name in INITIAL_SIZES:
+            sku = f"VV-{product_index:03d}-{size_name}-{color_name[:3].upper()}"
+            variant = db.scalar(select(ProductoVariante).where(ProductoVariante.sku == sku))
+            if variant is None:
+                variant = ProductoVariante(
+                    id_producto=product.id_producto,
+                    id_talla=sizes[size_name].id_talla,
+                    id_color=colors[color_name].id_color,
+                    sku=sku,
+                    estado="ACTIVO",
+                )
+                db.add(variant)
+                db.flush()
+                created["variantes"] += 1
+
+            inventory = db.scalar(
+                select(Inventario).where(
+                    Inventario.id_sucursal == branch.id_sucursal,
+                    Inventario.id_variante == variant.id_variante,
+                )
+            )
+            if inventory is None:
+                db.add(
+                    Inventario(
+                        id_sucursal=branch.id_sucursal,
+                        id_variante=variant.id_variante,
+                        stock_disponible=12,
+                        stock_reservado=0,
+                    )
+                )
+                created["inventarios"] += 1
+
+    db.flush()
+    return created
+
+
+def seed_initial_data(db: Session) -> dict[str, int]:
+    created = {"roles": seed_roles(db)}
+    created["usuarios"] = _seed_users(db)
+    created.update(_seed_catalog(db))
+    return created
+
+
+def main() -> None:
+    db = SessionLocal()
+    try:
+        created = seed_initial_data(db)
+        db.commit()
+        print(f"Seed completado: {created}")
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()

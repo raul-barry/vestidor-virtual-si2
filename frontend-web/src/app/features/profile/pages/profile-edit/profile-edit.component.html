@@ -1,0 +1,44 @@
+<main class="profile-page">
+  <mat-card class="profile-card">
+    <mat-card-header>
+      <mat-card-title>Editar perfil</mat-card-title>
+      <mat-card-subtitle>Actualiza tus datos de contacto</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (isLoading) {
+        <p>Cargando perfil...</p>
+      } @else {
+        <form [formGroup]="profileForm" (ngSubmit)="submit()" novalidate>
+          <mat-form-field appearance="outline">
+            <mat-label>Nombres</mat-label>
+            <input matInput formControlName="nombres" autocomplete="given-name" />
+            @if (profileForm.controls.nombres.invalid && profileForm.controls.nombres.touched) {
+              <mat-error>Los nombres son obligatorios.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Apellidos</mat-label>
+            <input matInput formControlName="apellidos" autocomplete="family-name" />
+            @if (profileForm.controls.apellidos.invalid && profileForm.controls.apellidos.touched) {
+              <mat-error>Los apellidos son obligatorios.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Teléfono</mat-label>
+            <input matInput type="tel" formControlName="telefono" autocomplete="tel" />
+            @if (profileForm.controls.telefono.invalid && profileForm.controls.telefono.touched) {
+              <mat-error>El teléfono es obligatorio.</mat-error>
+            }
+          </mat-form-field>
+
+          <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">
+            {{ isSubmitting ? 'Guardando...' : 'Guardar cambios' }}
+          </button>
+        </form>
+      }
+    </mat-card-content>
+  </mat-card>
+</main>

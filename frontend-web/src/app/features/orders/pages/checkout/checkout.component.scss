@@ -1,0 +1,91 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.checkout-page {
+  background: #f8fafc;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.checkout-header,
+.checkout-layout,
+.success-card {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 70rem;
+}
+
+.checkout-header {
+  margin-bottom: 2rem;
+}
+
+.checkout-header p {
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.5rem;
+}
+
+h1,
+h2 {
+  color: #172554;
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.checkout-layout {
+  align-items: start;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+}
+
+.summary-card mat-card-content,
+.total-card mat-card-content,
+.success-card mat-card-content {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.summary-item {
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+}
+
+.summary-item span:last-child {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.total-card strong,
+.success-card strong {
+  color: #0f766e;
+  font-size: 1.8rem;
+}
+
+.loading-state,
+.empty-state {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 4rem auto;
+  max-width: 30rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (max-width: 48rem) {
+  .checkout-layout {
+    grid-template-columns: 1fr;
+  }
+}

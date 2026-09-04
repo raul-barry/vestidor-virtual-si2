@@ -1,0 +1,1 @@
+-- Reserved for the initial database schema migration. No tables are defined yet.

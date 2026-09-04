@@ -1,0 +1,13 @@
+import { Component, inject } from '@angular/core';
+import { ReactiveFormsModule, NonNullableFormBuilder, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatTableModule } from '@angular/material/table';
+import { AdminVariant } from '../../models/variant-admin.model';
+import { VariantAdminService } from '../../services/variant-admin.service';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state.component';
+import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
+
+@Component({ selector:'app-variant-management',standalone:true,imports:[ReactiveFormsModule,MatButtonModule,MatFormFieldModule,MatInputModule,MatTableModule,LoadingSpinnerComponent,EmptyStateComponent],template:`<section class="page"><h1>Variantes</h1><form [formGroup]="productForm" (ngSubmit)="load()"><mat-form-field><mat-label>ID producto</mat-label><input matInput type="number" formControlName="id"></mat-form-field><button mat-flat-button color="primary">Cargar variantes</button></form>@if(loading){<app-loading-spinner/>}@else if(!variants.length){<app-empty-state message="Selecciona un producto con variantes."/>}@else{<table mat-table [dataSource]="variants"><ng-container matColumnDef="sku"><th mat-header-cell *matHeaderCellDef>SKU</th><td mat-cell *matCellDef="let v">{{v.sku}}</td></ng-container><ng-container matColumnDef="talla"><th mat-header-cell *matHeaderCellDef>Talla</th><td mat-cell *matCellDef="let v">{{v.talla}}</td></ng-container><ng-container matColumnDef="color"><th mat-header-cell *matHeaderCellDef>Color</th><td mat-cell *matCellDef="let v">{{v.color}}</td></ng-container><ng-container matColumnDef="estado"><th mat-header-cell *matHeaderCellDef>Estado</th><td mat-cell *matCellDef="let v">{{v.estado}}</td></ng-container><tr mat-header-row *matHeaderRowDef="cols"></tr><tr mat-row *matRowDef="let row;columns:cols"></tr></table>}`,styles:['.page{padding:2rem}form{display:flex;gap:1rem;align-items:center}table{width:100%}'] })
+export class VariantManagementComponent { private fb=inject(NonNullableFormBuilder);private service=inject(VariantAdminService);productForm=this.fb.group({id:[0,[Validators.min(1)]]});variants:AdminVariant[]=[];loading=false;cols=['sku','talla','color','estado'];load(){if(this.productForm.invalid)return;this.loading=true;this.service.list(this.productForm.controls.id.value).subscribe({next:v=>{this.variants=v;this.loading=false},error:()=>{this.variants=[];this.loading=false}})} }

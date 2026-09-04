@@ -1,0 +1,10 @@
+.env
+**/.env
+**/__pycache__/
+**/node_modules/
+**/.dart_tool/
+**/build/
+**/.angular/
+**/dist/
+**/.pytest_cache/
+*.pyc

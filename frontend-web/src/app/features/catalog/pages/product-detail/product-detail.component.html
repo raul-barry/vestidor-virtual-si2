@@ -1,0 +1,30 @@
+<main class="detail-page">
+  @if (isLoading) {
+    <div class="loading-state">
+      <mat-spinner diameter="42"></mat-spinner>
+      <span>Cargando producto...</span>
+    </div>
+  } @else if (variants && availability) {
+    <header class="detail-header">
+      <p>DETALLE DE PRODUCTO</p>
+      <h1>{{ variants.nombre_producto }}</h1>
+    </header>
+
+    <section class="detail-grid">
+      <mat-card>
+        <mat-card-header><mat-card-title>Tallas y colores</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <app-variant-selector [product]="variants" (selectedVariantChange)="selectedVariant = $event" />
+          <button mat-flat-button color="primary" type="button" [disabled]="isAddingToCart" (click)="addToCart()">
+            {{ isAddingToCart ? 'Agregando...' : 'Agregar al carrito' }}
+          </button>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-header><mat-card-title>Disponibilidad por sucursal</mat-card-title></mat-card-header>
+        <mat-card-content><app-availability-list [availability]="availability.disponibilidad" /></mat-card-content>
+      </mat-card>
+    </section>
+  }
+</main>

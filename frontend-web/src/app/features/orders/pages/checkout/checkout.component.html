@@ -1,0 +1,48 @@
+<main class="checkout-page">
+  <header class="checkout-header">
+    <p>CONFIRMACIÓN</p>
+    <h1>Revisa tu compra</h1>
+  </header>
+
+  @if (isLoading) {
+    <div class="loading-state">
+      <mat-spinner diameter="42"></mat-spinner>
+      <span>Cargando resumen...</span>
+    </div>
+  } @else if (createdOrder) {
+    <mat-card class="success-card">
+      <mat-card-content>
+        <p>Pedido creado</p>
+        <h2>#{{ createdOrder.id_pedido }}</h2>
+        <span>Estado: {{ createdOrder.estado }}</span>
+        <strong>{{ createdOrder.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+      </mat-card-content>
+    </mat-card>
+  } @else if (cart?.items?.length === 0) {
+    <mat-card class="empty-state">Tu carrito está vacío. Agrega productos antes de crear un pedido.</mat-card>
+  } @else if (cart) {
+    <section class="checkout-layout">
+      <mat-card class="summary-card">
+        <mat-card-header><mat-card-title>Productos</mat-card-title></mat-card-header>
+        <mat-card-content>
+          @for (item of cart.items; track item.id_detalle) {
+            <div class="summary-item">
+              <span>{{ item.producto }} · {{ item.talla }} · {{ item.color }}</span>
+              <span>{{ item.cantidad }} x {{ item.precio_unitario | currency:'BOB':'symbol-narrow':'1.2-2' }}</span>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="total-card">
+        <mat-card-content>
+          <span>Total</span>
+          <strong>{{ cart.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+          <button mat-flat-button color="primary" type="button" [disabled]="isSubmitting" (click)="createOrder()">
+            {{ isSubmitting ? 'Creando pedido...' : 'Crear pedido' }}
+          </button>
+        </mat-card-content>
+      </mat-card>
+    </section>
+  }
+</main>

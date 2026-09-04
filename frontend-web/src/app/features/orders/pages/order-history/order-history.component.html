@@ -1,0 +1,18 @@
+<main class="orders-page">
+  <header class="orders-header">
+    <p>MIS COMPRAS</p>
+    <h1>Historial de pedidos</h1>
+  </header>
+
+  @if (isLoading) {
+    <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pedidos...</span></div>
+  } @else if (orders.length === 0) {
+    <mat-card class="empty-state">Aún no tienes pedidos registrados.</mat-card>
+  } @else {
+    <section class="orders-list">
+      @for (order of orders; track order.id_pedido) {
+        <app-order-card [order]="order" (viewDetail)="viewOrderDetail($event)" />
+      }
+    </section>
+  }
+</main>

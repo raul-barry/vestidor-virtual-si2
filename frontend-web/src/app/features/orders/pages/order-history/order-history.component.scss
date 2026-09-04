@@ -1,0 +1,9 @@
+:host { display: block; min-height: 100%; }
+
+.orders-page { background: #f8fafc; min-height: 100vh; padding: 2rem; }
+.orders-header, .orders-list { margin: 0 auto; max-width: 60rem; }
+.orders-header { margin-bottom: 2rem; }
+.orders-header p { color: #4f46e5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
+h1 { color: #172554; font-size: clamp(2rem, 4vw, 3rem); margin: 0; }
+.orders-list { display: grid; gap: .75rem; }
+.loading-state, .empty-state { align-items: center; display: flex; gap: 1rem; justify-content: center; margin: 4rem auto; max-width: 30rem; padding: 2rem; text-align: center; }

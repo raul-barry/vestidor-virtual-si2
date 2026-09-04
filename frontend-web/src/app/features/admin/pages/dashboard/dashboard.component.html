@@ -1,0 +1,26 @@
+<main class="dashboard-page">
+  <header><p>ADMINISTRACIÓN</p><h1>Panel de control</h1></header>
+  @if (isLoading) {
+    <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando métricas...</span></div>
+  } @else if (hasError) {
+    <mat-card class="empty-state">No fue posible cargar los reportes administrativos.</mat-card>
+  } @else if (dashboard && sales) {
+    <section class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <mat-card><mat-card-content><span>Usuarios totales</span><strong>{{ dashboard.usuarios_totales }}</strong></mat-card-content></mat-card>
+      <mat-card><mat-card-content><span>Clientes</span><strong>{{ dashboard.clientes_totales }}</strong></mat-card-content></mat-card>
+      <mat-card><mat-card-content><span>Productos</span><strong>{{ dashboard.productos_totales }}</strong></mat-card-content></mat-card>
+      <mat-card><mat-card-content><span>Pedidos</span><strong>{{ dashboard.pedidos_totales }}</strong></mat-card-content></mat-card>
+      <mat-card><mat-card-content><span>Ventas</span><strong>{{ dashboard.ventas_totales }}</strong></mat-card-content></mat-card>
+      <mat-card><mat-card-content><span>Stock bajo</span><strong>{{ dashboard.productos_stock_bajo }}</strong></mat-card-content></mat-card>
+    </section>
+    @if (topProducts.length === 0 && topCategories.length === 0) {
+      <mat-card class="empty-state">Aún no hay ventas suficientes para generar gráficos.</mat-card>
+    } @else {
+      <section class="charts-grid">
+        <mat-card><mat-card-header><mat-card-title>Ventas por período</mat-card-title></mat-card-header><mat-card-content><app-sales-chart [sales]="sales" /></mat-card-content></mat-card>
+        <mat-card><mat-card-header><mat-card-title>Productos más vendidos</mat-card-title></mat-card-header><mat-card-content><app-top-products-chart [products]="topProducts" /></mat-card-content></mat-card>
+        <mat-card><mat-card-header><mat-card-title>Categorías más vendidas</mat-card-title></mat-card-header><mat-card-content><app-category-chart [categories]="topCategories" /></mat-card-content></mat-card>
+      </section>
+    }
+  }
+</main>

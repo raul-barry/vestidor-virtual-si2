@@ -1,0 +1,17 @@
+<mat-card class="product-card" role="button" tabindex="0" (click)="openProduct()" (keydown.enter)="openProduct()">
+  <img
+    mat-card-image
+    class="product-image"
+    src="https://placehold.co/640x480/e2e8f0/475569?text=Prenda"
+    alt="Imagen temporal de {{ producto.nombre }}"
+  />
+  <mat-card-content>
+    <p class="category">{{ producto.categoria.nombre }}</p>
+    <h2>{{ producto.nombre }}</h2>
+    <p class="description">{{ producto.descripcion || 'Descripción próximamente disponible.' }}</p>
+    <div class="product-footer">
+      <strong>{{ producto.precio_base | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+      <span>{{ producto.variantes.length }} variantes</span>
+    </div>
+  </mat-card-content>
+</mat-card>

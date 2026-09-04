@@ -1,0 +1,36 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.profile-page {
+  background: linear-gradient(145deg, #f8fafc, #eff6ff);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.profile-card {
+  margin: 0 auto;
+  max-width: 34rem;
+  padding: 1.25rem;
+}
+
+mat-card-title {
+  color: #1e3a8a;
+  font-size: 1.6rem;
+}
+
+form {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.5rem;
+}
+
+mat-form-field,
+button {
+  width: 100%;
+}
+
+button {
+  min-height: 3rem;
+}

@@ -1,0 +1,19 @@
+.filter-form {
+  align-items: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.filter-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  min-height: 3.5rem;
+}
+
+@media (max-width: 40rem) {
+  .filter-actions {
+    grid-column: 1 / -1;
+  }
+}

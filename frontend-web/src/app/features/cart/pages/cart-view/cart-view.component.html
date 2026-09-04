@@ -1,0 +1,35 @@
+<main class="cart-page">
+  <header class="cart-header">
+    <p>MI COMPRA</p>
+    <h1>Carrito</h1>
+  </header>
+
+  @if (isLoading) {
+    <div class="loading-state">
+      <mat-spinner diameter="42"></mat-spinner>
+      <span>Cargando carrito...</span>
+    </div>
+  } @else if (cart?.items?.length === 0) {
+    <mat-card class="empty-state">Tu carrito está vacío.</mat-card>
+  } @else if (cart) {
+    <section class="cart-layout">
+      <div class="items-list">
+        @for (item of cart.items; track item.id_detalle) {
+          <app-cart-item
+            [item]="item"
+            (quantityChange)="updateQuantity(item, $event)"
+            (itemRemoved)="removeItem(item)"
+          />
+        }
+      </div>
+
+      <mat-card class="total-card">
+        <mat-card-content>
+          <span>Total</span>
+          <strong>{{ cart.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+          <button mat-flat-button color="primary" type="button" (click)="checkout()">Confirmar compra</button>
+        </mat-card-content>
+      </mat-card>
+    </section>
+  }
+</main>

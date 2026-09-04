@@ -1,0 +1,15 @@
+@if (availability.length === 0) {
+  <p class="empty-message">No hay stock disponible en sucursales.</p>
+} @else {
+  <div class="availability-grid">
+    @for (branch of availability; track branch.id_sucursal) {
+      <mat-card class="branch-card">
+        <mat-card-content>
+          <h3>{{ branch.nombre_sucursal }}</h3>
+          <p>{{ branch.direccion }}</p>
+          <strong>{{ branch.stock_disponible }} disponibles</strong>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+}

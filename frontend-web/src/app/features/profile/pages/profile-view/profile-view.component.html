@@ -1,0 +1,25 @@
+<main class="profile-page">
+  <mat-card class="profile-card">
+    <mat-card-header>
+      <mat-card-title>Mi perfil</mat-card-title>
+      <mat-card-subtitle>Información personal de tu cuenta</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (isLoading) {
+        <p>Cargando perfil...</p>
+      } @else if (profile) {
+        <dl class="profile-details">
+          <div><dt>Nombres</dt><dd>{{ profile.nombres }}</dd></div>
+          <div><dt>Apellidos</dt><dd>{{ profile.apellidos }}</dd></div>
+          <div><dt>Correo</dt><dd>{{ profile.correo }}</dd></div>
+          <div><dt>Teléfono</dt><dd>{{ profile.telefono }}</dd></div>
+        </dl>
+      }
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <a mat-flat-button color="primary" routerLink="/profile/edit">Editar perfil</a>
+    </mat-card-actions>
+  </mat-card>
+</main>

@@ -1,0 +1,13 @@
+<mat-card class="order-card">
+  <mat-card-content>
+    <div>
+      <p class="eyebrow">PEDIDO #{{ order.id_pedido }}</p>
+      <h3>{{ order.fecha_pedido | date:'dd/MM/yyyy, HH:mm' }}</h3>
+      <span class="status">{{ order.estado }}</span>
+    </div>
+    <strong>{{ order.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+  </mat-card-content>
+  <mat-card-actions align="end">
+    <button mat-button color="primary" type="button" (click)="viewDetail.emit(order.id_pedido)">Ver detalle</button>
+  </mat-card-actions>
+</mat-card>

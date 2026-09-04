@@ -1,0 +1,52 @@
+.cart-item {
+  border-left: 3px solid #4f46e5;
+}
+
+mat-card-content {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+h3,
+p {
+  margin: 0;
+}
+
+h3 {
+  color: #172554;
+}
+
+p {
+  color: #64748b;
+  margin: 0.25rem 0 0.5rem;
+}
+
+strong {
+  color: #0f766e;
+}
+
+.item-actions {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.quantity-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+@media (max-width: 34rem) {
+  mat-card-content {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .item-actions {
+    align-items: start;
+  }
+}

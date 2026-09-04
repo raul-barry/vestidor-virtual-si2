@@ -1,0 +1,22 @@
+<main class="payment-page">
+  @if (isLoading) {
+    <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pago...</span></div>
+  } @else if (order) {
+    <header class="payment-header"><p>PEDIDO #{{ order.id_pedido }}</p><h1>Pago</h1></header>
+
+    <section class="payment-layout">
+      <mat-card class="order-card"><mat-card-content><span>Total del pedido</span><strong>{{ order.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong><span>Estado: {{ order.estado }}</span></mat-card-content></mat-card>
+
+      @if (payment) {
+        <mat-card class="payment-result"><mat-card-content><p>Pago registrado #{{ payment.id_pago }}</p><h2>{{ payment.metodo_pago }}</h2><span>Estado: {{ payment.estado }}</span><strong>{{ payment.monto | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong></mat-card-content></mat-card>
+      } @else {
+        <mat-card><mat-card-header><mat-card-title>Selecciona un método</mat-card-title></mat-card-header><mat-card-content>
+          <form [formGroup]="paymentForm" (ngSubmit)="createPayment()">
+            <mat-form-field appearance="outline"><mat-label>Método de pago</mat-label><mat-select formControlName="metodo_pago"><mat-option value="QR">QR</mat-option><mat-option value="EFECTIVO">Efectivo</mat-option><mat-option value="TARJETA">Tarjeta</mat-option></mat-select></mat-form-field>
+            <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">{{ isSubmitting ? 'Creando pago...' : 'Confirmar pago' }}</button>
+          </form>
+        </mat-card-content></mat-card>
+      }
+    </section>
+  }
+</main>

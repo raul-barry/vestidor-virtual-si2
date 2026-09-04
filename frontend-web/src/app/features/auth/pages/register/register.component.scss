@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.register-page {
+  align-items: center;
+  background: linear-gradient(145deg, #eff6ff 0%, #f8fafc 50%, #f0fdf4 100%);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.register-card {
+  max-width: 32rem;
+  padding: 1.25rem;
+  width: 100%;
+}
+
+mat-card-title {
+  color: #14532d;
+  font-size: 1.6rem;
+}
+
+form {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1.5rem;
+}
+
+mat-form-field,
+button {
+  width: 100%;
+}
+
+button {
+  min-height: 3rem;
+}

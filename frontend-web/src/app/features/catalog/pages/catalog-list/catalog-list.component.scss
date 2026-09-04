@@ -1,0 +1,59 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.catalog-page {
+  background: #f8fafc;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.catalog-header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 0 auto 2rem;
+  max-width: 80rem;
+}
+
+.filter-panel {
+  margin: 0 auto 2rem;
+  max-width: 80rem;
+  padding: 1rem;
+}
+
+.catalog-header p {
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  color: #172554;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1.1;
+  margin: 0;
+}
+
+@media (max-width: 40rem) {
+  .catalog-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.loading-state,
+.empty-state {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin: 4rem auto;
+  max-width: 26rem;
+  padding: 2rem;
+  text-align: center;
+}

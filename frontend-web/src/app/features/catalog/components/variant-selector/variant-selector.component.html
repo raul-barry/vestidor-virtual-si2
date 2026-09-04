@@ -1,0 +1,29 @@
+<section class="variant-selector">
+  @if (product.variantes.length === 0) {
+    <p class="empty-message">Este producto aún no tiene variantes disponibles.</p>
+  } @else {
+    <div class="selector-group">
+      <h3>Tallas disponibles</h3>
+      <mat-chip-listbox aria-label="Tallas disponibles">
+        @for (talla of product.tallas; track talla) {
+          <mat-chip-option [selected]="selectedSize === talla" (click)="selectSize(talla)">
+            {{ talla }}
+          </mat-chip-option>
+        }
+      </mat-chip-listbox>
+    </div>
+
+    <div class="selector-group">
+      <h3>Colores disponibles</h3>
+      <mat-chip-listbox aria-label="Colores disponibles">
+        @for (color of product.colores; track color) {
+          <mat-chip-option [selected]="selectedColor === color" (click)="selectColor(color)">
+            {{ color }}
+          </mat-chip-option>
+        }
+      </mat-chip-listbox>
+    </div>
+
+    <button mat-button type="button" (click)="clearSelection()">Limpiar selección</button>
+  }
+</section>

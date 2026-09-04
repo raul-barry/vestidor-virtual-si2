@@ -1,0 +1,4 @@
+.admin-sidebar { background: #172554; color: #e2e8f0; height: 100%; width: 16rem; }
+.brand { align-items: center; border-bottom: 1px solid rgba(226, 232, 240, .15); display: flex; font-weight: 700; gap: .75rem; padding: 1.5rem; }
+a[mat-list-item] { color: #cbd5e1; margin: .2rem .65rem; width: calc(100% - 1.3rem); }
+a[mat-list-item].active { background: #312e81; border-radius: .35rem; color: #fff; }

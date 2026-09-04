@@ -1,0 +1,45 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.profile-page {
+  background: linear-gradient(145deg, #f8fafc, #eff6ff);
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.profile-card {
+  margin: 0 auto;
+  max-width: 42rem;
+  padding: 1.25rem;
+}
+
+mat-card-title {
+  color: #1e3a8a;
+  font-size: 1.6rem;
+}
+
+.profile-details {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+}
+
+.profile-details div {
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+}
+
+dt {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+dd {
+  margin: 0;
+}

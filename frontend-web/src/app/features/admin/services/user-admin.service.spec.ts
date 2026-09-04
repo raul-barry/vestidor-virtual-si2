@@ -1,0 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { UserAdminService } from './user-admin.service';
+describe('UserAdminService',()=>{let service:UserAdminService;let http:HttpTestingController;beforeEach(()=>{TestBed.configureTestingModule({providers:[provideHttpClient(),provideHttpClientTesting()]});service=TestBed.inject(UserAdminService);http=TestBed.inject(HttpTestingController)});afterEach(()=>http.verify());it('gets and updates users',()=>{service.getUsers({rol:'CLIENTE'}).subscribe();let r=http.expectOne('http://localhost:8000/api/admin/users');expect(r.request.method).toBe('GET');r.flush([]);service.updateStatus(1,{estado:'INACTIVO'}).subscribe();r=http.expectOne('http://localhost:8000/api/admin/users/1/status');expect(r.request.method).toBe('PUT');r.flush({});service.updateRole(1,{id_rol:2}).subscribe();r=http.expectOne('http://localhost:8000/api/admin/users/1/role');r.flush({})})});
