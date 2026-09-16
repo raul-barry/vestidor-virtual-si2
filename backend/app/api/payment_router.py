@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from app.core.config import settings
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -57,6 +58,8 @@ def approve_payment(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ) -> PaymentResponse:
+    if settings.environment not in ("development", "test"):
+        raise HTTPException(403, "Simulación de pagos deshabilitada")
     service, id_cliente = get_payment_service_for_user(db, current_user)
     return service.approve_payment(id_pago, id_cliente)
 
@@ -71,5 +74,7 @@ def reject_payment(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ) -> PaymentResponse:
+    if settings.environment not in ("development", "test"):
+        raise HTTPException(403, "Simulación de pagos deshabilitada")
     service, id_cliente = get_payment_service_for_user(db, current_user)
     return service.reject_payment(id_pago, id_cliente)

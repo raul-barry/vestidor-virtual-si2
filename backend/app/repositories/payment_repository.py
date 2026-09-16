@@ -24,10 +24,10 @@ class PaymentRepository:
         return self.db.scalar(statement)
 
     def get_payment_by_id(self, id_pago: int) -> Pago | None:
-        return self.db.get(Pago, id_pago)
+        return self.db.scalar(select(Pago).where(Pago.id_pago == id_pago).with_for_update().execution_options(populate_existing=True))
 
     def get_order_by_id(self, id_pedido: int) -> Pedido | None:
-        return self.db.get(Pedido, id_pedido)
+        return self.db.scalar(select(Pedido).where(Pedido.id_pedido == id_pedido).with_for_update().execution_options(populate_existing=True))
 
     def get_client_by_user(self, id_usuario: int) -> Cliente | None:
         statement = select(Cliente).where(Cliente.id_usuario == id_usuario)

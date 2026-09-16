@@ -16,6 +16,7 @@
         <h2>#{{ createdOrder.id_pedido }}</h2>
         <span>Estado: {{ createdOrder.estado }}</span>
         <strong>{{ createdOrder.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+        <button mat-flat-button color="primary" type="button" (click)="payOrder()">Continuar al pago</button>
       </mat-card-content>
     </mat-card>
   } @else if (cart?.items?.length === 0) {

@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -12,6 +13,7 @@ import { AuthService } from '../../services/auth.service';
   selector: 'app-password-reset-request',
   standalone: true,
   imports: [
+    RouterLink,
     ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
@@ -32,6 +34,7 @@ export class PasswordResetRequestComponent {
   });
 
   isSubmitting = false;
+  resetToken = '';
 
   submit(): void {
     if (this.requestForm.invalid) {
@@ -43,7 +46,7 @@ export class PasswordResetRequestComponent {
     this.authService.requestPasswordReset(this.requestForm.controls.correo.value).pipe(
       finalize(() => (this.isSubmitting = false))
     ).subscribe({
-      next: () => this.snackBar.open('Solicitud enviada correctamente', 'Cerrar', { duration: 3000 }),
+      next: (response) => { this.resetToken = response.token ?? ''; this.snackBar.open('Solicitud enviada correctamente', 'Cerrar', { duration: 3000 }); },
       error: (error: { error?: { message?: string } }) => {
         this.snackBar.open(error.error?.message ?? 'No fue posible enviar la solicitud', 'Cerrar', {
           duration: 5000

@@ -1,4 +1,10 @@
 <main class="payment-page">
+  <p>Pago de demostración: no se realiza ningún cobro real.</p>
+  @if (payment?.estado === 'RECHAZADO') { <button mat-button (click)="createPayment()" [disabled]="isSubmitting">Reintentar pago</button> }
+  @if (payment?.estado === 'PENDIENTE') {
+    <button mat-flat-button color="primary" (click)="processPayment(true)" [disabled]="isSubmitting">Simular pago aprobado</button>
+    <button mat-button (click)="processPayment(false)" [disabled]="isSubmitting">Simular rechazo</button>
+  }
   @if (isLoading) {
     <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pago...</span></div>
   } @else if (order) {

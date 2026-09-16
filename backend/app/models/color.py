@@ -9,5 +9,6 @@ class Color(Base):
 
     id_color: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    estado: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVO")
 
     variantes: Mapped[list["ProductoVariante"]] = relationship(back_populates="color")

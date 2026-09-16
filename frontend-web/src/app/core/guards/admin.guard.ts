@@ -37,9 +37,6 @@ export const adminGuard: CanActivateFn = () => {
   rol = rol?.trim().toUpperCase() ?? null;
   const resultado = !!token && rol === 'ADMINISTRADOR';
 
-  console.log('ADMIN GUARD TOKEN', token);
-  console.log('ADMIN GUARD ROL', rol);
-  console.log('ADMIN GUARD RESULT', resultado);
 
   if (resultado) {
     return true;

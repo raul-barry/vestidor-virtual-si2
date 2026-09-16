@@ -9,6 +9,8 @@ from app.models.color import Color
 from app.models.producto import Producto
 from app.models.producto_variante import ProductoVariante
 from app.models.talla import Talla
+from app.models.inventario import Inventario
+from app.models.sucursal import Sucursal
 
 
 def create_variant(db) -> int:
@@ -23,6 +25,7 @@ def create_variant(db) -> int:
     color = Color(nombre="Blanco")
     variante = ProductoVariante(producto=producto, talla=talla, color=color, sku="OXF-M-BLA")
     db.add_all([categoria, producto, talla, color, variante])
+    db.add(Inventario(variante=variante, sucursal=Sucursal(nombre="Central", direccion="Centro"), stock_disponible=10))
     db.commit()
     return variante.id_variante
 

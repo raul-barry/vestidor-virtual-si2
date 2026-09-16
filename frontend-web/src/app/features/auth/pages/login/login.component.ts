@@ -49,17 +49,12 @@ export class LoginComponent {
       next: (response) => {
         this.snackBar.open('Sesión iniciada correctamente', 'Cerrar', { duration: 3000 });
         const rol = (response.rol ?? this.authService.getRoleFromToken(response.access_token))?.trim().toUpperCase();
-        const ruta = rol === 'ADMINISTRADOR' ? '/admin' : '/catalog';
-        console.log('LOGIN RESPONSE', response);
-        console.log('ROL LOGIN', rol);
-        console.log('REDIRECCIÓN FINAL', ruta);
-        console.log('ENTRANDO LOGIN COMPONENT');
+
         if (rol === 'ADMINISTRADOR') {
           void this.router.navigate(['/admin']);
-          console.log('NAVEGANDO ADMIN');
           return;
         }
-        void this.router.navigate(['/catalog']);
+        void this.router.navigate([rol === 'CAJERO' ? '/pos' : rol === 'ENCARGADO_SUCURSAL' ? '/inventory' : '/catalog']);
       },
       error: (error: { error?: { message?: string } }) => {
         this.snackBar.open(error.error?.message ?? 'No fue posible iniciar sesión', 'Cerrar', {

@@ -1,9 +1,11 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { ApiService } from '../../../../core/services/api.service';
+import { AuthService } from '../../../auth/services/auth.service';
 import { forkJoin } from 'rxjs';
 import {
   ProductAvailabilityResponse,
@@ -19,6 +21,7 @@ import { CartService } from '../../../cart/services/cart.service';
   selector: 'app-product-detail',
   standalone: true,
   imports: [
+    RouterLink,
     MatCardModule,
     MatButtonModule,
     MatProgressSpinnerModule,
@@ -35,6 +38,10 @@ export class ProductDetailComponent implements OnInit {
   private readonly cartService = inject(CartService);
   private readonly snackBar = inject(MatSnackBar);
 
+  private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  productId = 0;
+
   variants: ProductVariantsResponse | null = null;
   availability: ProductAvailabilityResponse | null = null;
   isLoading = true;
@@ -48,6 +55,7 @@ export class ProductDetailComponent implements OnInit {
       return;
     }
 
+    this.productId = productId;
     forkJoin({
       variants: this.catalogService.getProductVariants(productId),
       availability: this.catalogService.getProductAvailability(productId)
@@ -56,10 +64,27 @@ export class ProductDetailComponent implements OnInit {
         this.variants = response.variants;
         this.availability = response.availability;
         this.isLoading = false;
+        this.recordPreference('vista');
       },
       error: () => this.handleError()
     });
   }
+
+  selectVariant(variant: ProductoVariante | null): void {
+    this.selectedVariant = variant;
+    if (variant) this.recordPreference('seleccion');
+  }
+
+  recordPreference(tipo: 'vista' | 'seleccion' | 'favorita'): void {
+    if (!this.auth.hasSession()) return;
+    this.api.post('/api/experience/preferences', {tipo, id_producto: this.productId,
+      id_variante: tipo === 'seleccion' ? this.selectedVariant?.id_variante : null}).subscribe({
+      next: () => {if (tipo === 'favorita') this.snackBar.open('Categoría guardada como favorita', 'Cerrar', {duration: 3000});},
+      error: () => {if (tipo === 'favorita') this.snackBar.open('No se pudo guardar la preferencia', 'Cerrar', {duration: 3000});}
+    });
+  }
+
+  hasSession(): boolean { return this.auth.hasSession(); }
 
   addToCart(): void {
     if (this.selectedVariant === null) {

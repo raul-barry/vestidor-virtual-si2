@@ -1,0 +1,14 @@
+.env
+.git
+.gitignore
+.dockerignore
+*.md
+__pycache__
+*.pyc
+node_modules
+dist
+.angular
+coverage
+.pytest_cache
+.nyc_output
+*.log

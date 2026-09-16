@@ -30,6 +30,9 @@ class OrderService:
         if not cart_items:
             raise AppException("No se puede crear un pedido con un carrito vacío", status_code=400)
 
+        for item in cart_items:
+            if item.variante.estado != "ACTIVO" or item.variante.producto.estado != "ACTIVO":
+                raise AppException("Producto no disponible", status_code=409)
         total = sum((item.precio_unitario * item.cantidad for item in cart_items), Decimal("0"))
         try:
             order = self.repository.create_order(id_cliente, total)

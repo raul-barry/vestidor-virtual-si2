@@ -1,12 +1,15 @@
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.carrito import Carrito
 from app.models.carrito_detalle import CarritoDetalle
 from app.models.cliente import Cliente
 from app.models.producto_variante import ProductoVariante
+from app.models.inventario import Inventario
+from app.models.producto import Producto
+from app.models.sucursal import Sucursal
 
 
 class CartRepository:
@@ -14,7 +17,7 @@ class CartRepository:
         self.db = db
 
     def get_active_cart_by_client(self, id_cliente: int) -> Carrito | None:
-        statement = select(Carrito).where(Carrito.id_cliente == id_cliente, Carrito.estado == "ACTIVO")
+        statement = select(Carrito).where(Carrito.id_cliente == id_cliente, Carrito.estado == "ACTIVO").with_for_update().execution_options(populate_existing=True)
         return self.db.scalar(statement)
 
     def get_client_by_user(self, id_usuario: int) -> Cliente | None:
@@ -22,6 +25,14 @@ class CartRepository:
         return self.db.scalar(statement)
 
     def create_cart(self, id_cliente: int) -> Carrito:
+        cart = self.db.scalar(select(Carrito).where(Carrito.id_cliente == id_cliente).with_for_update())
+        if cart is not None:
+            if cart.estado != "ACTIVO":
+                for item in self.get_cart_items(cart.id_carrito):
+                    self.db.delete(item)
+                cart.estado = "ACTIVO"
+                self.db.flush()
+            return cart
         cart = Carrito(id_cliente=id_cliente, estado="ACTIVO")
         self.db.add(cart)
         self.db.flush()
@@ -35,6 +46,18 @@ class CartRepository:
             .options(joinedload(ProductoVariante.producto))
         )
         return self.db.scalar(statement)
+
+    def get_available_stock(self, id_variante: int) -> int | None:
+        statement = (
+            select(func.sum(Inventario.stock_disponible), func.count(Inventario.id_inventario))
+            .join(Sucursal, Inventario.id_sucursal == Sucursal.id_sucursal)
+            .where(
+                Inventario.id_variante == id_variante,
+                Sucursal.estado == "ACTIVA",
+            )
+        )
+        stock, inventory_count = self.db.execute(statement).one()
+        return int(stock or 0) if inventory_count else None
 
     def get_item_by_cart_and_variant(self, id_carrito: int, id_variante: int) -> CarritoDetalle | None:
         statement = select(CarritoDetalle).where(

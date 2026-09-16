@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
+from uuid import uuid4
+from sqlalchemy import select
+from app.models.sesion import Sesion
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -30,6 +33,7 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     payload["exp"] = expires_at
+    payload["jti"] = str(uuid4())
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -67,10 +71,41 @@ def get_current_user(
             detail="Token inválido",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if usuario.estado.upper() != "ACTIVO":
+        raise HTTPException(status_code=403, detail="Usuario inactivo")
+    session = db.scalar(select(Sesion).where(Sesion.id_usuario == user_id,
+        Sesion.token_jwt == credentials.credentials, Sesion.estado == "ACTIVA"))
+    if session is None:
+        raise HTTPException(status_code=401, detail="Sesión inválida o revocada")
+    expires = session.fecha_expiracion
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Sesión expirada")
     return usuario
+
+
+def require_roles(*allowed_roles: str):
+    def role_checker(current_user: Usuario = Depends(get_current_user)) -> Usuario:
+        if current_user.rol.nombre not in allowed_roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+        return current_user
+
+    return role_checker
 
 
 def get_current_admin(current_user: Usuario = Depends(get_current_user)) -> Usuario:
     if current_user.rol.nombre != "ADMINISTRADOR":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
     return current_user
+
+
+def get_current_staff(current_user: Usuario = Depends(get_current_user)) -> Usuario:
+    if current_user.rol.nombre not in ("ADMINISTRADOR", "ENCARGADO_SUCURSAL"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+    return current_user
+
+
+def require_branch(user: Usuario, branch_id: int) -> None:
+    if user.rol.nombre != "ADMINISTRADOR" and (user.id_sucursal is None or user.id_sucursal != branch_id):
+        raise HTTPException(status_code=403, detail="Sucursal no asignada al usuario")

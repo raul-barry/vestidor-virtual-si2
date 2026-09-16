@@ -8,6 +8,12 @@ export const ADMIN_ROUTES: Routes = [
     component: AdminLayoutComponent,
     canActivateChild: [adminGuard],
     children: [
+      { path: 'security', data: {mode: 'security'}, loadComponent: () => import('../experience/experience.component').then(c => c.ExperienceComponent) },
+      ...['cities', 'suppliers', 'collections', 'promotions', 'returns', 'audit'].map(mode => ({ path: mode, data: {mode}, loadComponent: () => import('../commerce/commerce.component').then(c => c.CommerceComponent) })),
+      { path: 'categories', loadComponent: () => import('./pages/categories/category-list.component').then(c => c.CategoryListComponent) },
+      { path: 'sizes', loadComponent: () => import('./pages/sizes/size-list.component').then(c => c.SizeListComponent) },
+      { path: 'colors', loadComponent: () => import('./pages/colors/color-list.component').then(c => c.ColorListComponent) },
+      { path: 'branches', loadComponent: () => import('./pages/branches/branch-list.component').then(c => c.BranchListComponent) },
       {
         path: 'dashboard',
         loadComponent: () => import('./pages/dashboard/dashboard.component').then(

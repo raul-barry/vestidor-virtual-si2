@@ -81,9 +81,13 @@ class CatalogRepository:
             .select_from(Inventario)
             .join(Sucursal, Inventario.id_sucursal == Sucursal.id_sucursal)
             .join(ProductoVariante, Inventario.id_variante == ProductoVariante.id_variante)
+            .join(Producto, ProductoVariante.id_producto == Producto.id_producto)
             .where(
                 ProductoVariante.id_producto == product_id,
                 Inventario.stock_disponible > 0,
+                ProductoVariante.estado == "ACTIVO",
+                Producto.estado == "ACTIVO",
+                Sucursal.estado == "ACTIVA",
             )
             .group_by(Sucursal.id_sucursal, Sucursal.nombre, Sucursal.direccion)
             .order_by(Sucursal.nombre)

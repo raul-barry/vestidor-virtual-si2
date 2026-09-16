@@ -6,6 +6,7 @@ from app.models.pago import Pago
 from app.models.pedido import Pedido
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.payment import CreatePaymentRequest, PaymentResponse
+from app.services.stock_sale_service import consume_order_stock
 
 
 class PaymentService:
@@ -23,8 +24,16 @@ class PaymentService:
         if order is None:
             raise AppException("Pedido no encontrado", status_code=404)
         self._ensure_order_owner(order, id_cliente)
-        if self.repository.get_payment_by_order(request.id_pedido):
-            raise AppException("El pedido ya tiene un pago creado", status_code=409)
+        if order.estado != "PENDIENTE":
+            raise AppException("El pedido no está pendiente", status_code=409)
+        existing = self.repository.get_payment_by_order(request.id_pedido)
+        if existing:
+            if existing.estado != "RECHAZADO":
+                raise AppException("El pedido ya tiene un pago creado", status_code=409)
+            existing.estado = "PENDIENTE"
+            existing.metodo_pago = request.metodo_pago
+            self.repository.db.commit()
+            return self._to_response(existing)
 
         try:
             payment = self.repository.create_payment(order.id_pedido, request.metodo_pago, order.total)
@@ -41,6 +50,9 @@ class PaymentService:
             raise AppException("Pedido no encontrado", status_code=404)
         self._ensure_order_owner(order, id_cliente)
         try:
+            if order.estado != "PENDIENTE":
+                raise AppException("El pedido no está pendiente", status_code=409)
+            consume_order_stock(self.repository.db, order)
             self.repository.update_payment_status(payment, "APROBADO")
             self.repository.update_order_status(order, "CONFIRMADO")
             self.repository.db.commit()

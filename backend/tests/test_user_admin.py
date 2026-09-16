@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from conftest import session_token
 from app.main import app
 from app.models.bitacora import Bitacora
 from app.models.rol import Rol
@@ -35,7 +35,7 @@ def create_user(db, role_name: str, correo: str, estado: str = "ACTIVO") -> Usua
 
 def admin_headers(db) -> tuple[dict[str, str], Usuario]:
     admin = create_user(db, "ADMINISTRADOR", "admin@example.com")
-    token = create_access_token({"id_usuario": admin.id_usuario, "rol": "ADMINISTRADOR"})
+    token = session_token(db, {"id_usuario": admin.id_usuario, "rol": "ADMINISTRADOR"})
     return {"Authorization": f"Bearer {token}"}, admin
 
 
@@ -110,7 +110,7 @@ def test_cannot_deactivate_last_administrator_or_change_current_admin_role(db) -
 
 def test_customer_cannot_access_user_administration(db) -> None:
     customer = create_user(db, "CLIENTE", "cliente@example.com")
-    token = create_access_token({"id_usuario": customer.id_usuario, "rol": "CLIENTE"})
+    token = session_token(db, {"id_usuario": customer.id_usuario, "rol": "CLIENTE"})
 
     response = TestClient(app).get("/api/admin/users", headers={"Authorization": f"Bearer {token}"})
 

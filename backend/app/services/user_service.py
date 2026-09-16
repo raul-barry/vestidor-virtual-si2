@@ -18,8 +18,6 @@ class UserService:
         usuario = self.user_repository.get_user_profile(id_usuario)
         if usuario is None:
             raise AppException("Usuario no encontrado", status_code=404)
-        if self.client_repository.get_client_by_user(id_usuario) is None:
-            raise AppException("Cliente no encontrado", status_code=404)
         return usuario
 
     def update_profile(self, id_usuario: int, request: ProfileUpdateRequest) -> Usuario:

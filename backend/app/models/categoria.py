@@ -10,5 +10,6 @@ class Categoria(Base):
     id_categoria: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     descripcion: Mapped[str | None] = mapped_column(String(255))
+    estado: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVO")
 
     productos: Mapped[list["Producto"]] = relationship(back_populates="categoria")

@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
 import { Cart } from '../../../../shared/models/cart.model';
 import { Order } from '../../../../shared/models/order.model';
 import { CartService } from '../../../cart/services/cart.service';
@@ -26,6 +27,7 @@ export class CheckoutComponent implements OnInit {
   private readonly cartService = inject(CartService);
   private readonly orderService = inject(OrderService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly router = inject(Router);
 
   cart: Cart | null = null;
   createdOrder: Order | null = null;
@@ -62,6 +64,12 @@ export class CheckoutComponent implements OnInit {
         });
       }
     });
+  }
+
+  payOrder(): void {
+    if (this.createdOrder) {
+      void this.router.navigate(['/payments', this.createdOrder.id_pedido]);
+    }
   }
 
   private handleLoadError(error: { error?: { message?: string } }): void {

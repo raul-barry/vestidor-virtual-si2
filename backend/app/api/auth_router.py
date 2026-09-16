@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import get_current_user
+from app.core.security import bearer_scheme
+from fastapi.security import HTTPAuthorizationCredentials
 from app.database.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.auth import (
@@ -71,9 +73,10 @@ def login(request: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse
     },
 )
 def logout(
-    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> LogoutResponse:
-    AuthService(db).logout_user(current_user)
+    AuthService(db).logout_user(current_user, credentials.credentials)
     return LogoutResponse(message="Sesión cerrada correctamente")
 
 
@@ -92,7 +95,7 @@ def request_password_reset(
     token = AuthService(db).request_password_reset(request)
     return PasswordResetResponse(
         message="Solicitud de recuperación generada correctamente",
-        token=token if settings.expose_reset_token else None,
+        token=token if settings.expose_reset_token and settings.environment in ("development", "test") else None,
     )
 
 

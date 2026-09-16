@@ -10,6 +10,7 @@ class Usuario(Base):
     __tablename__ = "usuario"
 
     id_usuario: Mapped[int] = mapped_column(primary_key=True)
+    id_sucursal: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id_sucursal"))
     id_rol: Mapped[int] = mapped_column(ForeignKey("rol.id_rol"), nullable=False, index=True)
     nombres: Mapped[str] = mapped_column(String(100), nullable=False)
     apellidos: Mapped[str] = mapped_column(String(100), nullable=False)

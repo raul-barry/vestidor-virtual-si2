@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.exceptions import AppException
 from app.core.config import settings
@@ -97,8 +98,10 @@ class AuthService:
             self.repository.db.rollback()
             raise AppException("No se pudo iniciar sesión", status_code=500) from exc
 
-    def logout_user(self, usuario: Usuario) -> None:
-        sesion = self.repository.get_active_session_by_user(usuario.id_usuario)
+    def logout_user(self, usuario: Usuario, token: str | None = None) -> None:
+        sesion = self.repository.db.scalar(select(Sesion).where(
+            Sesion.id_usuario == usuario.id_usuario, Sesion.token_jwt == token,
+            Sesion.estado == "ACTIVA")) if token else self.repository.get_active_session_by_user(usuario.id_usuario)
         if sesion is None:
             raise AppException("Sesión no encontrada", status_code=404)
 
@@ -155,6 +158,10 @@ class AuthService:
         try:
             self.repository.update_password(recovery_token.usuario, hash_password(request.nueva_password))
             self.repository.mark_token_used(recovery_token)
+            for session in self.repository.db.scalars(select(Sesion).where(Sesion.id_usuario == recovery_token.id_usuario)).all():
+                session.estado = "INACTIVA"
+            for other in self.repository.db.scalars(select(TokenRecuperacion).where(TokenRecuperacion.id_usuario == recovery_token.id_usuario)).all():
+                other.usado = True
             self.repository.create_bitacora(
                 Bitacora(
                     id_usuario=recovery_token.id_usuario,

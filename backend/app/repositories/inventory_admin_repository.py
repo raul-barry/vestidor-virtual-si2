@@ -29,6 +29,7 @@ class InventoryAdminRepository:
         statement = (
             select(Inventario)
             .where(Inventario.id_inventario == id_inventario)
+            .with_for_update(of=Inventario)
             .options(
                 joinedload(Inventario.sucursal),
                 joinedload(Inventario.variante).joinedload(ProductoVariante.producto),

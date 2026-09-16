@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-import { UpdateUserRoleRequest, UpdateUserStatusRequest, UserAdmin } from '../models/user-admin.model';
+import { CreateUserAdminRequest, UpdateUserRoleRequest, UpdateUserStatusRequest, UserAdmin } from '../models/user-admin.model';
 
 @Injectable({ providedIn: 'root' })
 export class UserAdminService {
@@ -16,6 +16,7 @@ export class UserAdminService {
     );
   }
   getUserDetail(id: number): Observable<UserAdmin> { return this.api.get<UserAdmin>(`/api/admin/users/${id}`); }
+  createUser(data: CreateUserAdminRequest): Observable<UserAdmin> { return this.api.post<UserAdmin>('/api/admin/users', data); }
   updateStatus(id: number, data: UpdateUserStatusRequest): Observable<UserAdmin> { return this.api.put<UserAdmin>(`/api/admin/users/${id}/status`, data); }
   updateRole(id: number, data: UpdateUserRoleRequest): Observable<UserAdmin> { return this.api.put<UserAdmin>(`/api/admin/users/${id}/role`, data); }
 }

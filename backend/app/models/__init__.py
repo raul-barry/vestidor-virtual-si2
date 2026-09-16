@@ -1,4 +1,6 @@
 from app.models.base import Base
+from app.models.reserva import Reserva
+from app.models.comercio import Ciudad, Proveedor, Coleccion, Promocion, Devolucion
 from app.models.bitacora import Bitacora
 from app.models.carrito import Carrito
 from app.models.carrito_detalle import CarritoDetalle
@@ -41,3 +43,5 @@ __all__ = [
     "TokenRecuperacion",
     "Usuario",
 ]
+
+from app.models.recurso_virtual import RecursoVirtual

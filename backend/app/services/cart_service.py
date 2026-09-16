@@ -7,6 +7,7 @@ from app.core.exceptions import AppException
 from app.models.carrito import Carrito
 from app.repositories.cart_repository import CartRepository
 from app.schemas.cart import CartItemResponse, CartResponse
+from app.services.pricing_service import current_price
 
 
 class CartService:
@@ -35,14 +36,20 @@ class CartService:
         variante = self.repository.get_variant_by_id(id_variante)
         if variante is None:
             raise AppException("Variante no encontrada", status_code=404)
+        if variante.estado != "ACTIVO" or variante.producto.estado != "ACTIVO":
+            raise AppException("Producto no disponible", status_code=409)
 
         try:
             cart = self._get_or_create_active_cart(id_cliente)
             item = self.repository.get_item_by_cart_and_variant(cart.id_carrito, id_variante)
+            requested_quantity = cantidad if item is None else item.cantidad + cantidad
+            available_stock = self.repository.get_available_stock(id_variante)
+            if available_stock is not None and requested_quantity > available_stock:
+                raise AppException("La cantidad supera el inventario disponible", status_code=409)
             if item is None:
-                self.repository.add_item(cart.id_carrito, id_variante, cantidad, variante.producto.precio_base)
+                self.repository.add_item(cart.id_carrito, id_variante, cantidad, current_price(self.repository.db, variante.producto))
             else:
-                self.repository.update_quantity(item, item.cantidad + cantidad)
+                self.repository.update_quantity(item, requested_quantity)
             self.repository.db.commit()
             return self._to_response(cart)
         except SQLAlchemyError as exc:
@@ -58,6 +65,9 @@ class CartService:
             item = self.repository.get_item_by_id(id_detalle)
             if item is None or item.id_carrito != cart.id_carrito:
                 raise AppException("Producto no encontrado en el carrito", status_code=404)
+            available_stock = self.repository.get_available_stock(item.id_variante)
+            if available_stock is not None and cantidad > available_stock:
+                raise AppException("La cantidad supera el inventario disponible", status_code=409)
             self.repository.update_quantity(item, cantidad)
             self.repository.db.commit()
             return self._to_response(cart)

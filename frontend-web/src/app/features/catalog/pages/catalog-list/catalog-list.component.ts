@@ -1,3 +1,4 @@
+import { RecommendationsSectionComponent } from '../../../experience/recommendations-section.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,6 +15,7 @@ import { CatalogService, ProductSearchFilters } from '../../services/catalog.ser
   selector: 'app-catalog-list',
   standalone: true,
   imports: [
+    RecommendationsSectionComponent,
     MatButtonModule,
     MatCardModule,
     MatProgressSpinnerModule,
@@ -37,7 +39,6 @@ export class CatalogListComponent implements OnInit {
   isLoading = true;
 
   ngOnInit(): void {
-    console.log('CATALOG CARGADO');
     this.loadProducts();
   }
 

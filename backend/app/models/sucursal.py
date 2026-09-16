@@ -10,6 +10,7 @@ class Sucursal(Base):
     id_sucursal: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
     direccion: Mapped[str] = mapped_column(String(255), nullable=False)
+    ciudad: Mapped[str] = mapped_column(String(100), nullable=False, default="Santa Cruz")
     estado: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVA")
 
     inventarios: Mapped[list["Inventario"]] = relationship(back_populates="sucursal")

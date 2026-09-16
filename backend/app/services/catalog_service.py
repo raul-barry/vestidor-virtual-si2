@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppException
 from app.models.producto import Producto
 from app.repositories.catalog_repository import CatalogRepository
+from app.services.pricing_service import current_price
 from app.schemas.catalog import (
     AvailabilityResponse,
     BranchAvailabilityResponse,
@@ -32,9 +33,8 @@ class CatalogService:
     ) -> list[ProductCatalogResponse]:
         if precio_max is not None and precio_max <= 0:
             raise AppException("precio_max debe ser positivo", status_code=422)
-        return self._to_response(
-            self.repository.search_products(nombre, categoria, talla, color, precio_max)
-        )
+        products = self._to_response(self.repository.search_products(nombre, categoria, talla, color, None))
+        return [p for p in products if precio_max is None or p.precio_base <= precio_max]
 
     def get_variants(self, id_producto: int) -> ProductVariantsResponse:
         product = self.repository.get_product_variants(id_producto)
@@ -77,14 +77,13 @@ class CatalogService:
             ],
         )
 
-    @staticmethod
-    def _to_response(products: list[Producto]) -> list[ProductCatalogResponse]:
+    def _to_response(self, products: list[Producto]) -> list[ProductCatalogResponse]:
         return [
             ProductCatalogResponse(
                 id_producto=product.id_producto,
                 nombre=product.nombre,
                 descripcion=product.descripcion,
-                precio_base=product.precio_base,
+                precio_base=current_price(self.repository.db, product),
                 estado=product.estado,
                 categoria=CategoryResponse(
                     id_categoria=product.categoria.id_categoria,
@@ -97,8 +96,8 @@ class CatalogService:
                         talla=variant.talla.nombre,
                         color=variant.color.nombre,
                     )
-                    for variant in product.variantes
+                    for variant in product.variantes if variant.estado == "ACTIVO"
                 ],
             )
-            for product in products
+            for product in products if product.estado == "ACTIVO"
         ]

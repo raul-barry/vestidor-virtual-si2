@@ -14,10 +14,12 @@
       <mat-card>
         <mat-card-header><mat-card-title>Tallas y colores</mat-card-title></mat-card-header>
         <mat-card-content>
-          <app-variant-selector [product]="variants" (selectedVariantChange)="selectedVariant = $event" />
+          <app-variant-selector [product]="variants" (selectedVariantChange)="selectVariant($event)" />
           <button mat-flat-button color="primary" type="button" [disabled]="isAddingToCart" (click)="addToCart()">
             {{ isAddingToCart ? 'Agregando...' : 'Agregar al carrito' }}
           </button>
+          <a mat-stroked-button routerLink="/experience/fitting" [queryParams]="{producto_id: productId, variante_id: selectedVariant?.id_variante}">Probar en vestidor</a>
+          @if (hasSession()) {<button mat-button type="button" (click)="recordPreference('favorita')">Marcar categoría favorita</button>}
         </mat-card-content>
       </mat-card>
 

@@ -10,3 +10,13 @@ def test_seed_roles_creates_missing_roles_once(db) -> None:
 
     assert set(db.scalars(select(Rol.nombre)).all()) == set(INITIAL_ROLES)
     assert seed_roles(db) == 0
+
+
+def test_seed_initial_data_creates_all_users_and_is_idempotent(db) -> None:
+    from app.database.seed import seed_initial_data
+    created = seed_initial_data(db)
+    assert created["usuarios"] == 4
+
+    created_second = seed_initial_data(db)
+    assert created_second["usuarios"] == 0
+

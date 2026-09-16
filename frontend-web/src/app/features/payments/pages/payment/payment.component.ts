@@ -98,4 +98,12 @@ export class PaymentComponent implements OnInit {
     this.isLoading = false;
     this.snackBar.open('No fue posible cargar la información de pago', 'Cerrar', { duration: 5000 });
   }
+
+  processPayment(approve: boolean): void {
+    if (!this.payment || this.isSubmitting) return;
+    this.isSubmitting = true;
+    const request = approve ? this.paymentService.approvePayment(this.payment.id_pago) : this.paymentService.rejectPayment(this.payment.id_pago);
+    request.subscribe({ next: payment => { this.payment = payment; this.isSubmitting = false; this.ngOnInit(); },
+      error: error => { this.isSubmitting = false; this.snackBar.open(error.error?.message || error.error?.detail || 'No se pudo procesar el pago', 'Cerrar', {duration: 5000}); } });
+  }
 }

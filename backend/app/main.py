@@ -9,10 +9,14 @@ app = FastAPI(title=settings.project_name)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_exception_handler(AppException, app_exception_handler)
 app.include_router(api_router)
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+app.mount("/api/assets", StaticFiles(directory=Path(__file__).parent / "assets"), name="assets")

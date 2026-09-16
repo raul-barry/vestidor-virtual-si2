@@ -31,6 +31,7 @@ export interface PasswordResetConfirm {
 
 interface MessageResponse {
   message: string;
+  token?: string;
 }
 
 @Injectable({ providedIn: 'root' })
