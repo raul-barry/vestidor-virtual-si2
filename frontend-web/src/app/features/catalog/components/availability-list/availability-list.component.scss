@@ -5,7 +5,7 @@
 }
 
 .branch-card {
-  border-left: 3px solid #0f766e;
+  border-left: 3px solid var(--primary);
 }
 
 mat-card-content {
@@ -25,9 +25,9 @@ h3 {
 
 p,
 .empty-message {
-  color: #64748b;
+  color: var(--muted);
 }
 
 strong {
-  color: #0f766e;
+  color: var(--primary);
 }

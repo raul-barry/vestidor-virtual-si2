@@ -1,5 +1,5 @@
 .cart-item {
-  border-left: 3px solid #4f46e5;
+  border-left: 3px solid var(--primary);
 }
 
 mat-card-content {
@@ -16,16 +16,16 @@ p {
 }
 
 h3 {
-  color: #172554;
+  color: var(--ink);
 }
 
 p {
-  color: #64748b;
+  color: var(--muted);
   margin: 0.25rem 0 0.5rem;
 }
 
 strong {
-  color: #0f766e;
+  color: var(--primary);
 }
 
 .item-actions {

@@ -6,8 +6,8 @@
 
 @include mat.core();
 
-$primary: mat.define-palette(mat.$indigo-palette);
-$accent: mat.define-palette(mat.$pink-palette, A200, A100, A400);
+$primary: mat.define-palette(mat.$teal-palette, 700);
+$accent: mat.define-palette(mat.$brown-palette);
 $warn: mat.define-palette(mat.$red-palette);
 
 $theme: mat.define-light-theme((
@@ -28,4 +28,78 @@ body {
 body {
   margin: 0;
   font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+// Shared visual foundations. See docs/frontend-visual-guide.md.
+:root {
+  --primary: #00695c;
+  --primary-soft: #e4efeb;
+  --ink: #202b29;
+  --muted: #596864;
+  --canvas: #f6f5f1;
+  --surface: #ffffff;
+  --border: #dce3df;
+  --danger: #b3261e;
+  --radius: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --shadow: 0 8px 28px rgb(32 43 41 / 6%);
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--canvas); color: var(--ink); font-family: 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.5; }
+a, button, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+h1, h2, h3 { color: var(--ink); font-weight: 600; letter-spacing: -.025em; }
+h1 { font-size: clamp(1.65rem, 3vw, 2.5rem); line-height: 1.2; margin: 0 0 24px; }
+button, input, select, textarea { font: inherit; }
+button:not([class*="mat-"]), input:not([matInput]):not([type="range"]):not([type="checkbox"]):not([type="radio"]), select:not([matNativeControl]), textarea:not([matInput]) { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-height: 44px; }
+button:not([class*="mat-"]) { background: var(--primary); color: white; cursor: pointer; font-weight: 600; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+input:not([matInput]):not([type="range"]):not([type="checkbox"]):not([type="radio"]), select:not([matNativeControl]), textarea:not([matInput]) { background: var(--surface); color: var(--ink); max-width: 100%; }
+label { color: var(--muted); font-size: 14px; }
+.mat-mdc-card { --mdc-elevated-card-container-color: var(--surface); --mdc-elevated-card-container-shape: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.mat-mdc-button-base { letter-spacing: 0; }
+.mat-mdc-unelevated-button, .mat-mdc-outlined-button { --mdc-filled-button-container-shape: 8px; --mdc-outlined-button-container-shape: 8px; min-height: 44px; }
+.mat-mdc-dialog-container { --mdc-dialog-container-shape: 16px; }
+.mat-mdc-dialog-content { line-height: 1.6; }
+.mat-mdc-table, table { background: var(--surface); border-collapse: collapse; }
+th, .mat-mdc-header-cell { color: var(--muted); background: #edf1ee; font-size: 12px; font-weight: 600; }
+td, th { border-bottom: 1px solid var(--border); }
+tr:hover td { background: #f7faf8; }
+.page-content .page, .page-content > router-outlet + * > main { max-width: 1440px; margin-inline: auto; }
+.page-content .page, .page-content section, .page-content main { min-width: 0; }
+.page-content .filters { flex-wrap: wrap; }
+.table-scroll { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.table-scroll table { width: 100%; }
+@media (max-width: 760px) {
+  .page-content .page, .page-content > router-outlet + * > main { padding: 20px 16px; }
+  .page-content .filters > *, .page-content form > mat-form-field { min-width: 0; max-width: 100%; }
+  .mat-mdc-dialog-content { max-height: 65dvh; }
+  .table-scroll table { min-width: 620px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+.state-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; gap: 16px; color: var(--muted); text-align: center; }
+.state-error { color: var(--danger); background: #fff1ef; border-radius: var(--radius); }
+
+// Tailwind preflight adds a border to every outline segment; Material owns the notch.
+.mat-mdc-form-field .mdc-notched-outline__notch { border-right: 0; }
+.commerce-page form, .experience-page form, .reservations-page form {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 24px; margin-block: 24px; display: flex; flex-wrap: wrap; align-items: end; gap: 16px;
+}
+.commerce-page label, .experience-page label, .reservations-page label { display: grid; gap: 8px; min-width: 0; }
+.commerce-page > button, .experience-page > button, .reservations-page > button { margin: 12px 8px 12px 0; }
+.experience-page article, .reservations-page article { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-block: 16px; padding: 24px; }
+.experience-page article a { color: var(--primary); text-decoration: underline; }
+.experience-page .stage { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 24px; }
+.reservations-page { padding: 32px; }
+@media (max-width: 760px) {
+  .page-content .toolbar { flex-wrap: wrap; }
+  .commerce-page form, .experience-page form, .reservations-page form { padding: 16px; }
+  .commerce-page form label, .experience-page form label, .reservations-page form label { width: 100%; }
 }

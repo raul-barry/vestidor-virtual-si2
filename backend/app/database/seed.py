@@ -271,9 +271,16 @@ def seed_initial_data(db: Session) -> dict[str, int]:
 
 
 def main() -> None:
+    import argparse
+    from app.core.config import settings
+    parser = argparse.ArgumentParser(description="Initialize roles or development demo data")
+    parser.add_argument("--roles-only", action="store_true")
+    args = parser.parse_args()
+    if settings.environment == "production" and not args.roles_only:
+        parser.error("Demo data is disabled in production; use --roles-only")
     db = SessionLocal()
     try:
-        created = seed_initial_data(db)
+        created = {"roles": seed_roles(db)} if args.roles_only else seed_initial_data(db)
         db.commit()
         print(f"Seed completado: {created}")
     except SQLAlchemyError:

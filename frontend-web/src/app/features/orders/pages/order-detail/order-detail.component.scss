@@ -1,14 +1,14 @@
 :host { display: block; min-height: 100%; }
-.detail-page { background: #f8fafc; min-height: 100vh; padding: 2rem; }
+.detail-page { background: var(--canvas); min-height: 100vh; padding: 2rem; }
 .detail-header, .detail-layout { margin: 0 auto; max-width: 70rem; }
 .detail-header { margin-bottom: 2rem; }
-.detail-header p { color: #4f46e5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
-h1 { color: #172554; font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 .5rem; }
-.detail-header span { color: #64748b; }
+.detail-header p { color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
+h1 { color: var(--ink); font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 .5rem; }
+.detail-header span { color: var(--muted); }
 .detail-layout { align-items: start; display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem); }
 mat-card-content { display: grid; gap: .75rem; padding: 1.25rem; }
-.detail-item { border-bottom: 1px solid #e2e8f0; display: grid; gap: .25rem; padding-bottom: .75rem; }
-.detail-item span:last-child { color: #64748b; font-size: .9rem; }
-.total-card strong { color: #0f766e; font-size: 1.8rem; }
+.detail-item { border-bottom: 1px solid var(--border); display: grid; gap: .25rem; padding-bottom: .75rem; }
+.detail-item span:last-child { color: var(--muted); font-size: .9rem; }
+.total-card strong { color: var(--primary); font-size: 1.8rem; }
 .loading-state, .empty-state { align-items: center; display: flex; gap: 1rem; justify-content: center; margin: 4rem auto; max-width: 30rem; padding: 2rem; text-align: center; }
 @media (max-width: 48rem) { .detail-layout { grid-template-columns: 1fr; } }

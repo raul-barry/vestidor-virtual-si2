@@ -1,6 +1,6 @@
 import { RecommendationsSectionComponent } from '../../../experience/recommendations-section.component';
 import { Component, OnInit, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -15,6 +15,7 @@ import { CatalogService, ProductSearchFilters } from '../../services/catalog.ser
   selector: 'app-catalog-list',
   standalone: true,
   imports: [
+    RouterLink,
     RecommendationsSectionComponent,
     MatButtonModule,
     MatCardModule,

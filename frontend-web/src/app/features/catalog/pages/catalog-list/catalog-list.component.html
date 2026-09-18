@@ -1,12 +1,12 @@
 <main class="catalog-page">
   <header class="catalog-header">
     <div>
-      <p>CATALOGO MASCULINO</p>
-      <h1>Encuentra tu proxima prenda</h1>
+      <p class="eyebrow">TU ESTILO, A TU MEDIDA</p>
+      <h1>Encuentra tu próxima prenda.</h1>
+      <p class="intro">Explora el catálogo masculino y descubre prendas para cada ocasión.</p>
+      <a mat-flat-button color="primary" routerLink="/fitting">Explorar el vestidor virtual</a>
     </div>
-    @if (hasSession()) {
-      <button mat-stroked-button type="button" (click)="logout()">Cerrar sesión</button>
-    }
+    <div class="editorial-mark" aria-hidden="true"><span>V</span><small>VESTIDOR VIRTUAL</small></div>
   </header>
 
   <mat-card class="filter-panel">
@@ -21,12 +21,12 @@
   @if (isLoading) {
     <div class="loading-state">
       <mat-spinner diameter="42"></mat-spinner>
-      <span>Cargando catalogo...</span>
+      <span>Cargando catálogo…</span>
     </div>
   } @else if (products.length === 0) {
     <mat-card class="empty-state">No se encontraron productos con los filtros aplicados.</mat-card>
   } @else {
-    <section class="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+    <section class="product-grid" aria-label="Prendas disponibles">
       @for (producto of products; track producto.id_producto) {
         <app-product-card [producto]="producto" />
       }

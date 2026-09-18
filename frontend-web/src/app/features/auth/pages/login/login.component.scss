@@ -5,7 +5,7 @@
 
 .login-page {
   align-items: center;
-  background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 55%, #fff7ed 100%);
+  background: linear-gradient(135deg, var(--primary-soft) 0%, var(--canvas) 55%, #fff7ed 100%);
   display: flex;
   justify-content: center;
   min-height: 100vh;

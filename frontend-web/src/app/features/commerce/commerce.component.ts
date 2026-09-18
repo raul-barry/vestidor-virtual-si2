@@ -7,7 +7,7 @@ import { ApiService } from '../../core/services/api.service';
 @Component({
   standalone: true, imports: [CommonModule, FormsModule],
   styles: [`main{padding:2rem;max-width:1100px;margin:auto}form{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem 0}label{display:grid;gap:.3rem}input,select,button{padding:.5rem}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:.7rem;border-bottom:1px solid #ddd}`],
-  template: `<main><h1>{{titles[mode]}}</h1><p role="status">{{message}}</p>
+  template: `<main class="commerce-page"><h1>{{titles[mode]}}</h1><p role="status">{{message}}</p>
     @if(mode === 'suppliers' || mode === 'collections' || mode === 'cities') {
       <form #masterForm="ngForm" (ngSubmit)="saveMaster()">
         <label>Nombre<input name="nombre" [(ngModel)]="master.nombre" required maxlength="150"></label>
@@ -16,9 +16,9 @@ import { ApiService } from '../../core/services/api.service';
         <button [disabled]="masterForm.invalid || busy">{{editId ? 'Guardar cambios' : 'Crear'}}</button>
         <button type="button" (click)="resetMaster()">Nuevo</button>
       </form>
-      <table><tr><th>Nombre</th><th>Detalle</th><th>Estado</th><th>Acciones</th></tr>
+      <div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Nombre</th><th>Detalle</th><th>Estado</th><th>Acciones</th></tr>
         @for(r of rows; track $index) { <tr><td>{{r.nombre}}</td><td>{{r.contacto || r.descripcion}}</td><td>{{r.estado}}</td><td><button (click)="editMaster(r)">Editar</button><button (click)="deleteMaster(r)" [disabled]="busy">Eliminar</button></td></tr> }
-      </table>
+      </table></div>
       @if(mode !== 'cities') { <h2>Asociar productos</h2>
       <form #linkForm="ngForm" (ngSubmit)="linkProduct()">
         <label>Producto<select name="producto" [(ngModel)]="productId" (ngModelChange)="selectProduct()" required><option [ngValue]="0">Seleccionar</option>@for(p of products; track p.id_producto){<option [ngValue]="p.id_producto">{{p.nombre}}</option>}</select></label>
@@ -39,15 +39,15 @@ import { ApiService } from '../../core/services/api.service';
         <button [disabled]="promotionForm.invalid || !promotion.id_producto || busy">{{editId ? 'Guardar cambios' : 'Crear promoción'}}</button>
         <button type="button" (click)="editId=0">Nueva</button>
       </form>
-      <table><tr><th>Promoción</th><th>Producto</th><th>Descuento</th><th>Vigencia</th><th>Estado</th><th></th></tr>
+      <div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Promoción</th><th>Producto</th><th>Descuento</th><th>Vigencia</th><th>Estado</th><th></th></tr>
         @for(r of rows; track r.id_promocion){<tr><td>{{r.nombre}}</td><td>{{productName(r.id_producto)}}</td><td>{{r.descuento}}%</td><td>{{r.inicio}} – {{r.fin}}</td><td>{{r.estado}}</td><td><button (click)="editPromotion(r)">Editar</button></td></tr>}
-      </table>
+      </table></div>
     }
     @if(mode === 'pos') {
       <p>Venta presencial. QR y tarjeta se registran en modo de demostración.</p>
       <label>Cliente<select [(ngModel)]="customerId"><option [ngValue]="0">Seleccionar cliente</option>@for(c of customers; track c.id_cliente){<option [ngValue]="c.id_cliente">{{c.nombre}}</option>}</select></label>
       <form (ngSubmit)="addLine()"><label>Producto / sucursal<select name="inventario" [(ngModel)]="inventoryId"><option [ngValue]="0">Seleccionar prenda</option>@for(i of inventory; track i.id_inventario){<option [ngValue]="i.id_inventario">{{i.producto}} · {{i.talla}} · {{i.color}} · {{i.sucursal}} · stock {{i.stock}} · Bs {{i.precio}}</option>}</select></label><label>Cantidad<input name="cantidad" type="number" [(ngModel)]="quantity" min="1" required></label><button [disabled]="!inventoryId || quantity < 1 || busy">Agregar</button></form>
-      <table><tr><th>Prenda</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>@for(l of lines; track l.id_inventario){<tr><td>{{l.producto}} · {{l.talla}} · {{l.color}} · {{l.sucursal}}</td><td>{{l.cantidad}}</td><td>Bs {{l.cantidad * l.precio | number:'1.2-2'}}</td><td><button (click)="removeLine(l.id_inventario)" [disabled]="busy">Quitar</button></td></tr>}</table>
+      <div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Prenda</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>@for(l of lines; track l.id_inventario){<tr><td>{{l.producto}} · {{l.talla}} · {{l.color}} · {{l.sucursal}}</td><td>{{l.cantidad}}</td><td>Bs {{l.cantidad * l.precio | number:'1.2-2'}}</td><td><button (click)="removeLine(l.id_inventario)" [disabled]="busy">Quitar</button></td></tr>}</table></div>
       <p>Total: Bs {{total | number:'1.2-2'}}</p>
       <label>Método de pago<select [(ngModel)]="paymentMethod"><option>EFECTIVO</option><option>QR</option><option>TARJETA</option></select></label>
       <button (click)="sell()" [disabled]="busy || !customerId || !lines.length">Confirmar venta y pago</button>
@@ -60,9 +60,9 @@ import { ApiService } from '../../core/services/api.service';
         <label>Motivo<input name="motivo" [(ngModel)]="returnData.motivo" required minlength="3" maxlength="255"></label>
         <button [disabled]="returnForm.invalid || !returnData.id_detalle || !returnData.id_inventario || busy">Registrar devolución</button>
       </form>
-      <table><tr><th>Devolución</th><th>Detalle vendido</th><th>Cantidad</th><th>Estado</th><th>Motivo</th><th>Fecha</th><th></th></tr>@for(r of rows; track r.id_devolucion){<tr><td>#{{r.id_devolucion}}</td><td>#{{r.id_detalle}}</td><td>{{r.cantidad}}</td><td>{{r.estado}}</td><td>{{r.motivo}}</td><td>{{r.fecha | date:'short'}}</td><td>@if(r.estado !== 'COMPLETADA'){<button (click)="setReturnStatus(r,'APROBADA')">Aprobar</button><button (click)="setReturnStatus(r,'RECHAZADA')">Rechazar</button><button (click)="setReturnStatus(r,'COMPLETADA')">Completar</button>}</td></tr>}</table>
+      <div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Devolución</th><th>Detalle vendido</th><th>Cantidad</th><th>Estado</th><th>Motivo</th><th>Fecha</th><th></th></tr>@for(r of rows; track r.id_devolucion){<tr><td>#{{r.id_devolucion}}</td><td>#{{r.id_detalle}}</td><td>{{r.cantidad}}</td><td>{{r.estado}}</td><td>{{r.motivo}}</td><td>{{r.fecha | date:'short'}}</td><td>@if(r.estado !== 'COMPLETADA'){<button (click)="setReturnStatus(r,'APROBADA')">Aprobar</button><button (click)="setReturnStatus(r,'RECHAZADA')">Rechazar</button><button (click)="setReturnStatus(r,'COMPLETADA')">Completar</button>}</td></tr>}</table></div>
     }
-    @if(mode === 'audit') { <button (click)="load()">Actualizar</button><table><tr><th>Fecha</th><th>Usuario</th><th>Acción</th></tr>@for(r of rows; track r.nro_bitacora){<tr><td>{{r.fecha_hora | date:'short'}}</td><td>{{r.id_usuario}}</td><td>{{r.accion}}</td></tr>}</table> }
+    @if(mode === 'audit') { <button (click)="load()">Actualizar</button><div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Fecha</th><th>Usuario</th><th>Acción</th></tr>@for(r of rows; track r.nro_bitacora){<tr><td>{{r.fecha_hora | date:'short'}}</td><td>{{r.id_usuario}}</td><td>{{r.accion}}</td></tr>}</table></div> }
   </main>`
 })
 export class CommerceComponent implements OnInit {

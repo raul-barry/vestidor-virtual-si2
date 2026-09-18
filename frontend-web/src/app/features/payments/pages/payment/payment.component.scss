@@ -1,11 +1,11 @@
 :host { display: block; min-height: 100%; }
-.payment-page { background: #f8fafc; min-height: 100vh; padding: 2rem; }
+.payment-page { background: var(--canvas); min-height: 100vh; padding: 2rem; }
 .payment-header, .payment-layout { margin: 0 auto; max-width: 60rem; }
 .payment-header { margin-bottom: 2rem; }
-.payment-header p { color: #4f46e5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
-h1, h2 { color: #172554; margin: 0; }
+.payment-header p { color: var(--primary); font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
+h1, h2 { color: var(--ink); margin: 0; }
 h1 { font-size: clamp(2rem, 4vw, 3rem); }
 .payment-layout { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
 mat-card-content, form { display: grid; gap: 1rem; padding: 1.25rem; }
-.order-card strong, .payment-result strong { color: #0f766e; font-size: 1.7rem; }
+.order-card strong, .payment-result strong { color: var(--primary); font-size: 1.7rem; }
 .loading-state { align-items: center; display: flex; gap: 1rem; justify-content: center; min-height: 50vh; }

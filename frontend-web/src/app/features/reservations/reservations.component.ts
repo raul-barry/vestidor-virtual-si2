@@ -11,7 +11,7 @@ interface Reservation extends Availability { id_reserva: number; cantidad: numbe
 @Component({
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `<main style="padding:2rem"><h1>Reservas</h1>
+  template: `<main class="reservations-page"><h1>Reservas</h1>
     <p role="status">{{message}}</p>
     @if (isClient) {
       <form (ngSubmit)="reserve()"><label>Prenda y sucursal
@@ -25,7 +25,7 @@ interface Reservation extends Availability { id_reserva: number; cantidad: numbe
     }
     <button (click)="load()" [disabled]="busy">Actualizar</button>
     @for (r of reservations; track r.id_reserva) {
-      <article style="padding:1rem;border-bottom:1px solid #ccc">
+      <article>
         <strong>#{{r.id_reserva}} {{r.producto}}</strong> · {{r.talla}} · {{r.color}} · {{r.sucursal}} · {{r.cantidad}} unidades · {{r.estado}}
         @if (r.estado !== 'CANCELADA') {
           @if (!isClient && r.estado === 'PENDIENTE') { <button (click)="update(r, 'CONFIRMADA')" [disabled]="busy">Confirmar</button> }

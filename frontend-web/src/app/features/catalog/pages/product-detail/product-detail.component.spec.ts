@@ -1,3 +1,6 @@
+import { RouterTestingModule } from '@angular/router/testing';
+import { ApiService } from '../../../../core/services/api.service';
+import { AuthService } from '../../../auth/services/auth.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -23,8 +26,10 @@ describe('ProductDetailComponent', () => {
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
     TestBed.configureTestingModule({
-      imports: [ProductDetailComponent, NoopAnimationsModule],
+      imports: [ProductDetailComponent, NoopAnimationsModule, RouterTestingModule],
       providers: [
+        { provide: ApiService, useValue: { post: () => of({}) } },
+        { provide: AuthService, useValue: { hasSession: () => false } },
         { provide: CatalogService, useValue: catalogService },
         { provide: CartService, useValue: cartService },
         { provide: MatSnackBar, useValue: snackBar },

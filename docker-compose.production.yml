@@ -1,0 +1,47 @@
+name: vestidor-production
+# Standalone: do not merge with the development compose file.
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vestidor_virtual}
+      POSTGRES_USER: ${POSTGRES_USER:-vestidor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - production_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    command: [sh, -c, 'alembic upgrade head && python -m app.database.seed --roles-only && uvicorn app.main:app --host 0.0.0.0 --port 8000']
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set production DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+      ENVIRONMENT: production
+      EXPOSE_RESET_TOKEN: 'false'
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+  frontend:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile.production
+    restart: unless-stopped
+    ports:
+      - '${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  production_data:

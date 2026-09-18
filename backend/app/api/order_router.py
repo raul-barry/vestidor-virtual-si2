@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user
+from app.core.security import require_roles
 from app.database.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.order import CreateOrderResponse, OrderDetailResponse, OrderSummaryResponse
@@ -26,7 +26,7 @@ def get_order_service_for_user(db: Session, current_user: Usuario) -> tuple[Orde
     },
 )
 def create_order(
-    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: Usuario = Depends(require_roles("CLIENTE"))
 ) -> CreateOrderResponse:
     service, id_cliente = get_order_service_for_user(db, current_user)
     order = service.create_order_from_cart(id_cliente)
@@ -35,7 +35,7 @@ def create_order(
 
 @order_router.get("", response_model=list[OrderSummaryResponse], responses={401: {"description": "Token inválido"}})
 def get_orders(
-    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: Usuario = Depends(require_roles("CLIENTE"))
 ) -> list[OrderSummaryResponse]:
     service, id_cliente = get_order_service_for_user(db, current_user)
     return [
@@ -57,7 +57,7 @@ def get_orders(
 def get_order_detail(
     id_pedido: int,
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
 ) -> OrderDetailResponse:
     service, id_cliente = get_order_service_for_user(db, current_user)
     return service.get_order_detail(id_cliente, id_pedido)

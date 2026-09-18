@@ -1,5 +1,5 @@
 .order-card {
-  border-left: 3px solid #4f46e5;
+  border-left: 3px solid var(--primary);
 }
 
 mat-card-content {
@@ -10,7 +10,7 @@ mat-card-content {
 }
 
 .eyebrow {
-  color: #4f46e5;
+  color: var(--primary);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -18,18 +18,18 @@ mat-card-content {
 }
 
 h3 {
-  color: #172554;
+  color: var(--ink);
   font-size: 1rem;
   margin: 0 0 0.5rem;
 }
 
 .status {
-  color: #0f766e;
+  color: var(--primary);
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 strong {
-  color: #0f766e;
+  color: var(--primary);
   font-size: 1.15rem;
 }

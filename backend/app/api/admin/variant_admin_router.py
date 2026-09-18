@@ -32,6 +32,22 @@ def create_variant(
     return VariantAdminService(db).create_variant(id_producto, request)
 
 
+@variant_admin_router.post(
+    "/variants",
+    response_model=VariantAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_variant_direct(
+    request: CreateVariantRequest,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_admin),
+) -> VariantAdminResponse:
+    from fastapi import HTTPException
+    if not request.id_producto:
+        raise HTTPException(status_code=400, detail="id_producto es requerido")
+    return VariantAdminService(db).create_variant(request.id_producto, request)
+
+
 @variant_admin_router.put("/variants/{id_variante}", response_model=VariantAdminResponse)
 def update_variant(
     id_variante: int,

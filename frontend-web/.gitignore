@@ -1,3 +1,7 @@
 node_modules/
 dist/
 .angular/
+
+# Generated local verification output
+*.log
+artifacts/

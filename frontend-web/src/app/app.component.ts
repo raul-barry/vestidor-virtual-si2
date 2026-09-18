@@ -1,30 +1,32 @@
-import { Component } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { Router, RouterOutlet } from '@angular/router';
 import { AuthService } from './features/auth/services/auth.service';
 import { TokenService } from './core/services/token.service';
-
+import { NavbarComponent } from './shared/components/navbar/navbar.component';
+import { AdminSidebarComponent } from './features/admin/components/admin-sidebar/admin-sidebar.component';
+import { isStaff, normalizeRole } from './shared/navigation/navigation.config';
 @Component({
-  selector: 'app-root',
-  standalone: true,
-  imports: [RouterOutlet, RouterLink],
-  template: `<nav style="display:flex;gap:1rem;flex-wrap:wrap;padding:1rem" aria-label="Navegación principal">
-    <a routerLink="/catalog">Catálogo</a>
-    @if (auth.hasSession()) {
-      @if (role === 'CLIENTE') { <a routerLink="/cart">Carrito</a><a routerLink="/orders">Mis pedidos</a> }
-      @if (role === 'CLIENTE') { <a routerLink="/recommendations">Recomendaciones</a><a routerLink="/fitting">Vestidor virtual</a> }
-      @if (role !== 'CAJERO') { <a routerLink="/reservations">Reservas</a> }
-      @if (role === 'ADMINISTRADOR') { <a routerLink="/admin">Administración</a> }
-      @if (role === 'CAJERO' || role === 'ADMINISTRADOR') { <a routerLink="/pos">Venta presencial</a> }
-      @if (role === 'ENCARGADO_SUCURSAL' || role === 'ENCARGADO') { <a routerLink="/inventory">Inventario</a> }
-      <a routerLink="/profile">Perfil</a><button (click)="logout()">Cerrar sesión</button>
-    } @else { <a routerLink="/auth/login">Iniciar sesión</a><a routerLink="/auth/register">Registrarse</a> }
-  </nav><router-outlet />`
+  selector: 'app-root', standalone: true, imports: [RouterOutlet, NavbarComponent, AdminSidebarComponent],
+  template: `
+    <a class="skip-link" href="#page-content">Saltar al contenido</a>
+    <app-navbar [signedIn]="auth.hasSession()" [staff]="staff" [role]="role" [expanded]="menuOpen" (toggleMenu)="menuOpen = !menuOpen" (signOut)="logout()" />
+    <div class="application-shell" [class.workspace]="staff">
+      @if (staff) {
+        <aside id="workspace-navigation" class="workspace-navigation" [class.mobile-open]="menuOpen" (keydown.escape)="closeMenu()">
+          <app-admin-sidebar [role]="role" (navigate)="closeMenu()" />
+        </aside>
+      }
+      <div id="page-content" class="page-content" tabindex="-1" (keydown.escape)="closeMenu()"><router-outlet (activate)="closeMenu()" /></div>
+    </div>`,
+  styleUrl: './app.component.scss'
 })
 export class AppComponent {
-  auth = inject(AuthService);
-  private tokens = inject(TokenService);
-  private router = inject(Router);
-  get role(): string | null { return this.auth.getRoleFromToken(this.tokens.getToken() ?? ''); }
-  logout(): void { this.auth.logout().subscribe({ next: () => this.router.navigate(['/auth/login']), error: () => this.router.navigate(['/auth/login']) }); }
+  readonly auth = inject(AuthService);
+  private readonly tokens = inject(TokenService);
+  private readonly router = inject(Router);
+  menuOpen = false;
+  get role(): string { return normalizeRole(this.auth.getRoleFromToken(this.tokens.getToken() ?? '')); }
+  get staff(): boolean { return this.auth.hasSession() && isStaff(this.role); }
+  closeMenu(): void { this.menuOpen = false; }
+  logout(): void { this.closeMenu(); this.auth.logout().subscribe({ next: () => this.router.navigate(['/auth/login']), error: () => this.router.navigate(['/auth/login']) }); }
 }

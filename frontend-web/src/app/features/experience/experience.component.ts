@@ -7,7 +7,7 @@ import { ApiService } from '../../core/services/api.service';
 
 @Component({standalone:true,imports:[CommonModule,FormsModule,RouterLink],
   styles:[`main{padding:2rem;max-width:1000px;margin:auto}form,.controls{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}label{display:grid}input,select,button{padding:.5rem}article{padding:1rem;border-bottom:1px solid #ddd}.stage{position:relative;width:360px;max-width:100%;height:500px;background:#edf0f3;overflow:hidden}.photo{width:100%;height:100%;object-fit:contain}.garment{position:absolute;width:180px;height:240px;transform-origin:center;pointer-events:none}.figure{width:100%;height:100%}table{width:100%}td,th{text-align:left;padding:.5rem}`],
-  template:`<main><h1>{{mode === 'recommendations' ? 'Recomendados para ti' : mode === 'fitting' ? 'Vestidor virtual' : 'Seguridad: sesiones'}}</h1><p role="status">{{message}}</p>
+  template:`<main class="experience-page"><h1>{{mode === 'recommendations' ? 'Recomendados para ti' : mode === 'fitting' ? 'Vestidor virtual' : 'Seguridad: sesiones'}}</h1><p role="status">{{message}}</p>
     @if(mode === 'recommendations') {
       <form (ngSubmit)="load()"><label>Talla<input name="talla" [(ngModel)]="size" placeholder="M"></label><label>Color<input name="color" [(ngModel)]="color" placeholder="Azul"></label><label>Categoría<input name="categoria" [(ngModel)]="category" placeholder="Camisas"></label><button>Recomendar</button></form>
       @for(r of rows;track r.id_variante){<article><strong>{{r.nombre}}</strong> · {{r.talla}} · {{r.color}} · Bs {{r.precio}}<p>{{r.motivo}}</p><a [routerLink]="['/catalog/product',r.id_producto]">Ver prenda</a> · <button (click)="add(r.id_variante)">Agregar al carrito</button></article>} @empty {<p>No hay prendas disponibles.</p>}
@@ -30,7 +30,7 @@ import { ApiService } from '../../core/services/api.service';
     @if(mode === 'security'){
       <h2>Asignaci?n de sucursal</h2>
       @for(u of staff; track u.id_usuario){<form (ngSubmit)="assign(u)"><span>{{u.nombre}} ? {{u.rol}}</span><select name="sucursal" [(ngModel)]="u.id_sucursal"><option [ngValue]="null">Sin asignaci?n</option>@for(b of branches;track b.id_sucursal){<option [ngValue]="b.id_sucursal">{{b.nombre}}</option>}</select><button [disabled]="busy">Guardar</button></form>}
-      <h2>Sesiones</h2><button (click)="load()">Actualizar</button><table><tr><th>Usuario</th><th>Inicio</th><th>Expiración</th><th>Estado</th><th></th></tr>@for(r of rows;track r.id_sesion){<tr><td>{{r.id_usuario}}</td><td>{{r.inicio|date:'short'}}</td><td>{{r.expiracion|date:'short'}}</td><td>{{r.estado}}</td><td>@if(r.estado==='ACTIVA'){<button (click)="revoke(r.id_sesion)" [disabled]="busy">Revocar</button>}</td></tr>}</table>}
+      <h2>Sesiones</h2><button (click)="load()">Actualizar</button><div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Usuario</th><th>Inicio</th><th>Expiración</th><th>Estado</th><th></th></tr>@for(r of rows;track r.id_sesion){<tr><td>{{r.id_usuario}}</td><td>{{r.inicio|date:'short'}}</td><td>{{r.expiracion|date:'short'}}</td><td>{{r.estado}}</td><td>@if(r.estado==='ACTIVA'){<button (click)="revoke(r.id_sesion)" [disabled]="busy">Revocar</button>}</td></tr>}</table></div>}
   </main>`})
 export class ExperienceComponent implements OnInit, OnDestroy {
   private api=inject(ApiService);private route=inject(ActivatedRoute);

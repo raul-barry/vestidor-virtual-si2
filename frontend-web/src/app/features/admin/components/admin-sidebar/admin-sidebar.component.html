@@ -1,24 +1,15 @@
-<aside class="admin-sidebar">
-  <div class="brand"><mat-icon>admin_panel_settings</mat-icon><span>Vestidor Admin</span></div>
-  <mat-nav-list>
-    <a mat-list-item routerLink="/admin/cities">Ciudades</a>
-    <a mat-list-item routerLink="/admin/security">Seguridad</a>
-    <a mat-list-item routerLink="/admin/suppliers">Proveedores</a>
-    <a mat-list-item routerLink="/admin/collections">Colecciones</a>
-    <a mat-list-item routerLink="/admin/promotions">Promociones</a>
-    <a mat-list-item routerLink="/admin/returns">Devoluciones</a>
-    <a mat-list-item routerLink="/admin/audit">Bitácora</a>
-    <a mat-list-item routerLink="/reservations">Reservas</a>
-    <a mat-list-item routerLink="/admin/categories" routerLinkActive="active">Categorías</a>
-    <a mat-list-item routerLink="/admin/sizes" routerLinkActive="active">Tallas</a>
-    <a mat-list-item routerLink="/admin/colors" routerLinkActive="active">Colores</a>
-    <a mat-list-item routerLink="/admin/branches" routerLinkActive="active">Ciudades y sucursales</a>
-    <a mat-list-item routerLink="/admin/dashboard" routerLinkActive="active"><mat-icon matListItemIcon>dashboard</mat-icon><span matListItemTitle>Dashboard</span></a>
-    <a mat-list-item routerLink="/admin/products" routerLinkActive="active"><mat-icon matListItemIcon>inventory_2</mat-icon><span matListItemTitle>Productos</span></a>
-    <a mat-list-item routerLink="/admin/variants" routerLinkActive="active"><mat-icon matListItemIcon>palette</mat-icon><span matListItemTitle>Variantes</span></a>
-    <a mat-list-item routerLink="/admin/inventory" routerLinkActive="active"><mat-icon matListItemIcon>warehouse</mat-icon><span matListItemTitle>Inventario</span></a>
-    <a mat-list-item routerLink="/admin/orders" routerLinkActive="active"><mat-icon matListItemIcon>receipt_long</mat-icon><span matListItemTitle>Pedidos</span></a>
-    <a mat-list-item routerLink="/admin/users" routerLinkActive="active"><mat-icon matListItemIcon>group</mat-icon><span matListItemTitle>Usuarios</span></a>
-    <a mat-list-item routerLink="/admin/reports" routerLinkActive="active"><mat-icon matListItemIcon>analytics</mat-icon><span matListItemTitle>Reportes</span></a>
-  </mat-nav-list>
-</aside>
+<nav class="admin-sidebar" aria-label="Navegación del equipo">
+  <p class="eyebrow">ESPACIO DE TRABAJO</p>
+  @if (role === 'ADMINISTRADOR') {
+    <a class="overview" routerLink="/admin/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page" (click)="navigate.emit()">Dashboard</a>
+  }
+  @for (group of navigationGroups(role); track group.label) {
+    <details routerLinkActive="current-group" #activeGroup="routerLinkActive" [attr.open]="activeGroup.isActive || role !== 'ADMINISTRADOR' ? '' : null">
+      <summary>{{ group.label }}</summary>
+      @for (item of group.links; track item.path) {
+        <a [routerLink]="item.path" routerLinkActive="active" ariaCurrentWhenActive="page" (click)="navigate.emit()">{{ item.label }}</a>
+      }
+    </details>
+  }
+  @if (role === 'ADMINISTRADOR') { <a class="store-link" routerLink="/catalog" (click)="navigate.emit()">Ver tienda ↗</a> }
+</nav>

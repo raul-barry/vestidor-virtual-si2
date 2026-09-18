@@ -1,3 +1,4 @@
+import { homeForRole } from '../../../../shared/navigation/navigation.config';
 import { Component, inject } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -50,11 +51,7 @@ export class LoginComponent {
         this.snackBar.open('Sesión iniciada correctamente', 'Cerrar', { duration: 3000 });
         const rol = (response.rol ?? this.authService.getRoleFromToken(response.access_token))?.trim().toUpperCase();
 
-        if (rol === 'ADMINISTRADOR') {
-          void this.router.navigate(['/admin']);
-          return;
-        }
-        void this.router.navigate([rol === 'CAJERO' ? '/pos' : rol === 'ENCARGADO_SUCURSAL' ? '/inventory' : '/catalog']);
+        void this.router.navigate([homeForRole(rol ?? '')]);
       },
       error: (error: { error?: { message?: string } }) => {
         this.snackBar.open(error.error?.message ?? 'No fue posible iniciar sesión', 'Cerrar', {
