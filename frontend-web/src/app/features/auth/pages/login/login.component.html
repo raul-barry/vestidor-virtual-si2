@@ -2,7 +2,7 @@
   <mat-card class="login-card">
     <mat-card-header>
       <mat-card-title>Bienvenido</mat-card-title>
-      <mat-card-subtitle>Ingresa a tu vestidor virtual</mat-card-subtitle>
+      <mat-card-subtitle>Ingresa a Fashion Store</mat-card-subtitle>
     </mat-card-header>
 
     <mat-card-content>
@@ -29,7 +29,9 @@
         <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">
           {{ isSubmitting ? 'Ingresando...' : 'Iniciar sesion' }}
         </button>
+        <a class="recovery-link" routerLink="/auth/password-reset">¿Olvidaste tu contraseña?</a>
       </form>
     </mat-card-content>
+    <mat-card-actions align="end"><a mat-button routerLink="/auth/register">Crear una cuenta</a></mat-card-actions>
   </mat-card>
 </main>

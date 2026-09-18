@@ -37,3 +37,6 @@ button {
 button {
   min-height: 3rem;
 }
+
+.recovery-link { color: var(--primary); font-size: .9rem; font-weight: 600; text-align: right; text-decoration: none; }
+.recovery-link:hover { text-decoration: underline; }

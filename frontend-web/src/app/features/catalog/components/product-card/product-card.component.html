@@ -1,9 +1,8 @@
 <mat-card class="product-card" role="button" tabindex="0" (click)="openProduct()" (keydown.enter)="openProduct()" (keydown.space)="$event.preventDefault(); openProduct()">
-  <div class="product-image product-placeholder" role="img" [attr.aria-label]="'Imagen no disponible de ' + producto.nombre">
-    <svg viewBox="0 0 120 140" aria-hidden="true" focusable="false">
-      <path d="M42 20 22 30 8 60 27 70 33 54 33 119 87 119 87 54 93 70 112 60 98 30 78 20C76 40 44 40 42 20Z" />
-    </svg>
-    <span>Imagen no disponible</span>
+  <div class="product-image" [class]="imageClass" role="img" [attr.aria-label]="'Imagen editorial de ' + producto.nombre">
+    <img src="assets/catalog/editorial-menswear.png" [alt]="producto.nombre" />
+    <span class="product-tag">NUEVA COLECCIÓN</span>
+    <span class="quick-view">Ver detalle →</span>
   </div>
   <mat-card-content>
     <p class="category">{{ producto.categoria.nombre }}</p>

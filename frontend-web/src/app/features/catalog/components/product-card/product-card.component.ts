@@ -16,6 +16,11 @@ export class ProductCardComponent {
 
   @Input({ required: true }) producto!: Producto;
 
+  get imageClass(): string {
+    const name = this.producto.nombre.toLowerCase();
+    return name.includes('pantal') ? 'product-image product-image-pants' : name.includes('chaqueta') ? 'product-image product-image-jacket' : 'product-image product-image-shirt';
+  }
+
   openProduct(): void {
     void this.router.navigate(['/catalog/product', this.producto.id_producto]);
   }

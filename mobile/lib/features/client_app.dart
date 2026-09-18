@@ -460,13 +460,26 @@ class _ClientHomeState extends State<ClientHome> {
     switch (page) {
       case 'Catálogo':
         return [
-          Text('Encuentra tu próxima prenda',
-              style: Theme.of(context).textTheme.headlineSmall),
+          Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                  color: const Color(0xff153f33),
+                  borderRadius: BorderRadius.circular(22)),
+              child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('TU ESTILO, A TU MEDIDA', style: TextStyle(color: Color(0xffa7ddbb), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.6)),
+                SizedBox(height: 12),
+                Text('Encuentra tu\npróxima prenda.', style: TextStyle(color: Colors.white, fontSize: 30, height: 1.05, fontFamily: 'serif')),
+                SizedBox(height: 12),
+                Text('Catálogo, recomendaciones y vestidor virtual en una experiencia.', style: TextStyle(color: Color(0xffdbe9e0)))
+              ])),
+          const SizedBox(height: 12),
           filters(),
           for (final r in rows)
             Card(
                 child: ListTile(
-                    leading: const Icon(Icons.checkroom),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    leading: Container(width: 48, height: 58, decoration: BoxDecoration(color: const Color(0xffe1e9e2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.checkroom, color: Color(0xff0d5848))),
                     title: Text(r['nombre']),
                     subtitle: Text(
                         '${r['categoria']['nombre']} · Bs ${r['precio_base']}'),
@@ -478,6 +491,8 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Detalle':
         final p = product!;
         return [
+          Container(height: 190, decoration: BoxDecoration(color: const Color(0xffe2e9e2), borderRadius: BorderRadius.circular(20)), child: const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848)))),
+          const SizedBox(height: 12),
           Text(p['nombre_producto'],
               style: Theme.of(context).textTheme.headlineSmall),
           Text(p['descripcion'] ?? ''),
@@ -511,9 +526,10 @@ class _ClientHomeState extends State<ClientHome> {
           TextButton(
               onPressed: busy ? null : () => go('Reservas'),
               child: const Text('Reservar por talla, color y sucursal')),
-          TextButton(
+          FilledButton.tonalIcon(
               onPressed: busy ? null : () => go('Vestidor'),
-              child: const Text('Abrir vestidor virtual')),
+              icon: const Icon(Icons.view_in_ar),
+              label: const Text('Probar en vestidor virtual')),
           TextButton(
               onPressed: busy ? null : () => go('Catálogo'),
               child: const Text('Volver al catálogo'))
@@ -673,8 +689,7 @@ class _ClientHomeState extends State<ClientHome> {
         ];
       case 'Vestidor':
         return [
-          const Text(
-              'Prueba orientativa sobre maniquí. La ilustración representa tipo y color; no es una fotografía ni calcula el ajuste físico.'),
+          Container(width: double.infinity, padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xff153f33), borderRadius: BorderRadius.circular(18)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text('FASHION STORE · VESTIDOR 3D', style: TextStyle(color: Color(0xffa7ddbb), fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Prueba tu próxima prenda', style: TextStyle(color: Colors.white, fontSize: 24, fontFamily: 'serif')), SizedBox(height: 8), Text('Vista orientativa por tipo y color.', style: TextStyle(color: Color(0xffdbe9e0)))])),
           DropdownButtonFormField<int>(
               key: ValueKey('fitting-$variantId'),
               initialValue: variantId,
@@ -812,7 +827,7 @@ class _ClientHomeState extends State<ClientHome> {
         },
         child: Scaffold(
             appBar: AppBar(
-                title: Text(loggedIn ? page : 'Vestidor Virtual'),
+                title: Text(loggedIn ? page : 'Fashion Store'),
                 actions: [
                   if (loggedIn)
                     IconButton(
@@ -826,7 +841,7 @@ class _ClientHomeState extends State<ClientHome> {
                         child: ListView(children: [
                     const ListTile(
                         leading: Icon(Icons.checkroom),
-                        title: Text('Vestidor Virtual'),
+                        title: Text('Fashion Store'),
                         subtitle: Text('Tu cuenta de cliente')),
                     for (final destination in [
                       'Catálogo',

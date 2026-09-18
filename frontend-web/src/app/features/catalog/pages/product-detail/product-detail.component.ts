@@ -44,6 +44,8 @@ export class ProductDetailComponent implements OnInit {
 
   variants: ProductVariantsResponse | null = null;
   availability: ProductAvailabilityResponse | null = null;
+  price = '';
+  description = '';
   isLoading = true;
   selectedVariant: ProductoVariante | null = null;
   isAddingToCart = false;
@@ -58,11 +60,15 @@ export class ProductDetailComponent implements OnInit {
     this.productId = productId;
     forkJoin({
       variants: this.catalogService.getProductVariants(productId),
-      availability: this.catalogService.getProductAvailability(productId)
+      availability: this.catalogService.getProductAvailability(productId),
+      products: this.catalogService.getProducts()
     }).subscribe({
       next: (response) => {
         this.variants = response.variants;
         this.availability = response.availability;
+        const product = response.products.find((item) => item.id_producto === productId);
+        this.price = product?.precio_base ?? '';
+        this.description = product?.descripcion ?? '';
         this.isLoading = false;
         this.recordPreference('vista');
       },

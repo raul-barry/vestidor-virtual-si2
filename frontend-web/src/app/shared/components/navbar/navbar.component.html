@@ -1,7 +1,7 @@
 <header class="navbar" [class.staff]="staff">
   <div class="navbar-top">
     @if (staff) { <button mat-stroked-button class="menu-toggle" type="button" (click)="toggleMenu.emit()" [attr.aria-expanded]="expanded" aria-controls="workspace-navigation">{{ expanded ? 'Cerrar menú' : 'Menú' }}</button> }
-    <a class="brand" [routerLink]="homeForRole(role)" aria-label="Vestidor Virtual, inicio"><span class="brand-mark" aria-hidden="true">V</span><span>VESTIDOR <strong>VIRTUAL</strong></span></a>
+    <a class="brand" [routerLink]="homeForRole(role)" aria-label="Fashion Store, inicio"><span class="brand-mark" aria-hidden="true">FS</span><span>FASHION <strong>STORE</strong></span></a>
     <div class="account">
       @if (staff) { <span class="role-label">{{ roleLabel }}</span> }
       @if (signedIn) { <button mat-stroked-button type="button" (click)="signOut.emit()">Cerrar sesión</button> }
