@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     password_reset_token_expire_minutes: int = 30
     expose_reset_token: bool = False
     cors_origins: str = "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4300,http://127.0.0.1:4300"
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_currency: str = "BOB"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

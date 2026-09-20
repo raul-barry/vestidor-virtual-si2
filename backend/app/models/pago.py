@@ -18,5 +18,8 @@ class Pago(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
     estado: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDIENTE")
+    proveedor: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    referencia_externa: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    evento_externo: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
 
     pedido: Mapped["Pedido"] = relationship()

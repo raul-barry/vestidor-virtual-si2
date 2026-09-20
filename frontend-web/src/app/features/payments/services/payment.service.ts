@@ -5,6 +5,17 @@ import { Payment } from '../../../shared/models/payment.model';
 
 export type PaymentMethod = Payment['metodo_pago'];
 
+export interface StripeIntentResponse {
+  client_secret: string;
+  publishable_key: string;
+  payment: Payment;
+}
+
+export interface PaymentStatusResponse {
+  payment: Payment;
+  order_status: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PaymentService {
   constructor(private readonly api: ApiService) {}
@@ -15,6 +26,18 @@ export class PaymentService {
 
   getPaymentByOrder(id_pedido: number): Observable<Payment> {
     return this.api.get<Payment>(`/api/payments/order/${id_pedido}`);
+  }
+
+  createStripeIntent(id_pedido: number): Observable<StripeIntentResponse> {
+    return this.api.post<StripeIntentResponse>('/api/payments/stripe/create-intent', { id_pedido });
+  }
+
+  createQrPayment(id_pedido: number): Observable<Payment> {
+    return this.api.post<Payment>('/api/payments/qr', { id_pedido, metodo_pago: 'QR' });
+  }
+
+  getPaymentStatus(id_pedido: number): Observable<PaymentStatusResponse> {
+    return this.api.get<PaymentStatusResponse>(`/api/payments/${id_pedido}/status`);
   }
 
   approvePayment(id_pago: number): Observable<Payment> {

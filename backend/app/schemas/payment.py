@@ -17,3 +17,20 @@ class PaymentResponse(BaseModel):
     monto: Decimal
     estado: str
     fecha_pago: datetime
+    proveedor: str | None = None
+    referencia_externa: str | None = None
+
+
+class StripeIntentRequest(BaseModel):
+    id_pedido: int
+
+
+class StripeIntentResponse(BaseModel):
+    client_secret: str
+    publishable_key: str
+    payment: PaymentResponse
+
+
+class PaymentStatusResponse(BaseModel):
+    payment: PaymentResponse
+    order_status: str

@@ -12,8 +12,8 @@ class PaymentRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def create_payment(self, id_pedido: int, metodo_pago: str, monto: Decimal) -> Pago:
-        payment = Pago(id_pedido=id_pedido, metodo_pago=metodo_pago, monto=monto, estado="PENDIENTE")
+    def create_payment(self, id_pedido: int, metodo_pago: str, monto: Decimal, **kwargs) -> Pago:
+        payment = Pago(id_pedido=id_pedido, metodo_pago=metodo_pago, monto=monto, estado="PENDIENTE", **kwargs)
         self.db.add(payment)
         self.db.flush()
         self.db.refresh(payment)
@@ -25,6 +25,9 @@ class PaymentRepository:
 
     def get_payment_by_id(self, id_pago: int) -> Pago | None:
         return self.db.scalar(select(Pago).where(Pago.id_pago == id_pago).with_for_update().execution_options(populate_existing=True))
+
+    def get_payment_by_reference(self, reference: str) -> Pago | None:
+        return self.db.scalar(select(Pago).where(Pago.referencia_externa == reference).with_for_update())
 
     def get_order_by_id(self, id_pedido: int) -> Pedido | None:
         return self.db.scalar(select(Pedido).where(Pedido.id_pedido == id_pedido).with_for_update().execution_options(populate_existing=True))

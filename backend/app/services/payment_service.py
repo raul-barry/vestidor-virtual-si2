@@ -85,6 +85,36 @@ class PaymentService:
         self._ensure_order_owner(order, id_cliente)
         return self._to_response(payment)
 
+    def create_stripe_payment(self, id_pedido: int, id_cliente: int | None, intent: dict) -> PaymentResponse:
+        order = self.repository.get_order_by_id(id_pedido)
+        if order is None:
+            raise AppException("Pedido no encontrado", status_code=404)
+        self._ensure_order_owner(order, id_cliente)
+        if order.estado != "PENDIENTE":
+            raise AppException("El pedido no está pendiente", status_code=409)
+        existing = self.repository.get_payment_by_order(id_pedido)
+        if existing and existing.estado not in ("RECHAZADO", "CANCELADO"):
+            if existing.referencia_externa != intent["id"]:
+                raise AppException("El pedido ya tiene un pago creado", status_code=409)
+            return self._to_response(existing)
+        if existing:
+            existing.metodo_pago = "TARJETA"
+            existing.proveedor = "STRIPE"
+            existing.referencia_externa = intent["id"]
+            existing.evento_externo = None
+            existing.estado = "PENDIENTE"
+            self.repository.db.commit()
+            return self._to_response(existing)
+        try:
+            payment = self.repository.create_payment(
+                id_pedido, "TARJETA", order.total, proveedor="STRIPE", referencia_externa=intent["id"]
+            )
+            self.repository.db.commit()
+            return self._to_response(payment)
+        except SQLAlchemyError as exc:
+            self.repository.db.rollback()
+            raise AppException("No se pudo registrar el pago Stripe", status_code=500) from exc
+
     def _get_pending_payment(self, id_pago: int) -> Pago:
         payment = self.repository.get_payment_by_id(id_pago)
         if payment is None:
@@ -107,4 +137,6 @@ class PaymentService:
             monto=payment.monto,
             estado=payment.estado,
             fecha_pago=payment.fecha_pago,
+            proveedor=payment.proveedor,
+            referencia_externa=payment.referencia_externa,
         )

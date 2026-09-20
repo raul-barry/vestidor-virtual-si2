@@ -1,7 +1,8 @@
-import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild, inject } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AvatarParameterService, BodyProfile } from '../services/avatar-parameter.service';
+import { ApiService } from '../../../core/services/api.service';
 
 @Component({
   selector: 'app-fitting-three-viewer',
@@ -22,8 +23,9 @@ export class FittingThreeViewerComponent implements AfterViewInit, OnChanges, On
   private frame = 0;
   private clothes?: THREE.Group;
   private accessoryGroup?: THREE.Group;
+  private api = inject(ApiService);
 
-  ngAfterViewInit(): void { this.createScene(); }
+  ngAfterViewInit(): void { this.createScene(); if (!this.bodyProfile) this.api.get<BodyProfile>('/api/body-profile').subscribe({next: profile => { this.bodyProfile = profile; this.applyBodyProfile(); }, error: () => {}}); }
   ngOnChanges(changes: SimpleChanges): void {
     if (this.scene && (changes['garment'] || changes['accessory'] || changes['bodyProfile'])) { this.applyBodyProfile(); this.updateLook(); }
   }
