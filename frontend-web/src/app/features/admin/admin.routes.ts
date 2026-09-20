@@ -9,7 +9,8 @@ export const ADMIN_ROUTES: Routes = [
     canActivateChild: [adminGuard],
     children: [
       { path: 'security', data: {mode: 'security'}, loadComponent: () => import('../experience/experience.component').then(c => c.ExperienceComponent) },
-      ...['cities', 'promotions', 'returns', 'audit'].map(mode => ({ path: mode, data: {mode}, loadComponent: () => import('../commerce/commerce.component').then(c => c.CommerceComponent) })),
+      ...['cities', 'promotions', 'returns'].map(mode => ({ path: mode, data: {mode}, loadComponent: () => import('../commerce/commerce.component').then(c => c.CommerceComponent) })),
+      { path: 'audit', loadComponent: () => import('./pages/audit/audit.component').then(c => c.AuditComponent) },
       { path: 'suppliers', loadComponent: () => import('./pages/suppliers/supplier-list.component').then(c => c.SupplierListComponent) },
       { path: 'collections', loadComponent: () => import('./pages/collections/collection-list.component').then(c => c.CollectionListComponent) },
       { path: 'categories', loadComponent: () => import('./pages/categories/category-list.component').then(c => c.CategoryListComponent) },
@@ -33,6 +34,7 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'roles', loadComponent: () => import('./pages/roles/role-list.component').then(c => c.RoleListComponent) },
       { path: 'users/detail/:id', loadComponent: () => import('./pages/users/user-detail/user-detail.component').then(c => c.UserDetailComponent) },
       { path: 'reports', loadComponent: () => import('./pages/reports/reports.component').then(c => c.ReportsComponent) },
+      { path: 'sales-history', loadComponent: () => import('./pages/sales-history/sales-history.component').then(c => c.SalesHistoryComponent) },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]
   }

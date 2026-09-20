@@ -22,6 +22,7 @@ from app.models.token_recuperacion import TokenRecuperacion
 from app.models.usuario import Usuario
 from app.models.organizacion import Organizacion
 from app.models.perfil_corporal import PerfilCorporal
+from app.models.preferencia_cliente import PreferenciaCliente, PreferenciaClienteColor
 
 __all__ = [
     "Base",

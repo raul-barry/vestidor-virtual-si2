@@ -72,6 +72,7 @@ class OrderService:
             fecha_pedido=order.fecha_pedido,
             estado=order.estado,
             total=order.total,
+            tipo_entrega=order.tipo_entrega,
             detalles=[
                 OrderItemResponse(
                     producto=detail.variante.producto.nombre,

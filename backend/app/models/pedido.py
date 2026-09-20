@@ -12,6 +12,7 @@ class Pedido(Base):
 
     id_pedido: Mapped[int] = mapped_column(primary_key=True)
     id_cliente: Mapped[int | None] = mapped_column(ForeignKey("cliente.id_cliente"), nullable=True, index=True)
+    id_vendedor: Mapped[int | None] = mapped_column(ForeignKey("usuario.id_usuario"), nullable=True, index=True)
     fecha_pedido: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

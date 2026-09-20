@@ -1,4 +1,5 @@
 <main class="detail-page">
+  <app-back-link [to]="['/orders']" label="Volver a Mis pedidos" />
   @if (isLoading) {
     <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pedido...</span></div>
   } @else if (isNotFound) {
@@ -9,6 +10,7 @@
       <h1>{{ order.estado }}</h1>
       <span>{{ order.fecha_pedido | date:'dd/MM/yyyy, HH:mm' }}</span>
     </header>
+    <app-order-status-tracker [estado]="order.estado" [tipoEntrega]="order.tipo_entrega === 'DELIVERY' ? 'DELIVERY' : 'RECOJO_SUCURSAL'" />
 
     <section class="detail-layout">
       <mat-card>

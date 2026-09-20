@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.security import get_current_admin, require_roles, require_branch
 from app.database.database import get_db
@@ -236,6 +236,7 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
     if data.tipo_entrega == "RECOJO_SUCURSAL" and not db.get(Sucursal, delivery_branch):
         raise HTTPException(404, "Sucursal de recojo no encontrada")
     order = Pedido(
+        id_vendedor=user.id_usuario,
         id_cliente=data.id_cliente, estado="ENTREGADO" if data.metodo_pago == "EFECTIVO" else "PENDIENTE",
         total=sum(price * qty for _, qty, price in rows), tipo_cliente=data.tipo_cliente,
         tipo_venta="PRESENCIAL", nit_ci=data.nit_ci, razon_social=data.razon_social,
@@ -338,3 +339,38 @@ def audit(db: Session = Depends(get_db), user: Usuario = Depends(get_current_adm
         }
         for row in db.scalars(select(Bitacora).order_by(Bitacora.nro_bitacora.desc()).limit(500)).all()
     ]
+
+
+@commerce_router.get("/sales-history")
+def sales_history(
+    fecha_desde: date | None = None, fecha_hasta: date | None = None, id_cliente: int | None = None,
+    id_vendedor: int | None = None, id_sucursal: int | None = None, metodo_pago: str | None = None,
+    estado: str | None = None, tipo_venta: str | None = None,
+    db: Session = Depends(get_db), user: Usuario = Depends(get_current_admin),
+):
+    customer_user = aliased(Usuario); seller = aliased(Usuario)
+    query = (select(Pedido, Pago, Cliente, customer_user, seller, Sucursal).outerjoin(Pago, Pago.id_pedido == Pedido.id_pedido)
+             .outerjoin(Cliente, Cliente.id_cliente == Pedido.id_cliente).outerjoin(customer_user, customer_user.id_usuario == Cliente.id_usuario)
+             .outerjoin(seller, seller.id_usuario == Pedido.id_vendedor).outerjoin(Sucursal, Sucursal.id_sucursal == Pedido.id_sucursal_entrega)
+             .order_by(Pedido.fecha_pedido.desc()))
+    if fecha_desde: query = query.where(func.date(Pedido.fecha_pedido) >= fecha_desde)
+    if fecha_hasta: query = query.where(func.date(Pedido.fecha_pedido) <= fecha_hasta)
+    if id_cliente: query = query.where(Pedido.id_cliente == id_cliente)
+    if id_vendedor: query = query.where(Pedido.id_vendedor == id_vendedor)
+    if id_sucursal: query = query.where(Pedido.id_sucursal_entrega == id_sucursal)
+    if metodo_pago: query = query.where(Pago.metodo_pago == metodo_pago)
+    if estado: query = query.where(Pedido.estado == estado)
+    if tipo_venta: query = query.where(Pedido.tipo_venta == tipo_venta)
+    return [dict(id_pedido=p.id_pedido, fecha=p.fecha_pedido, cliente=(f"{cu.nombres} {cu.apellidos}" if cu else "Consumidor final"), tipo_cliente=p.tipo_cliente, vendedor=(f"{su.nombres} {su.apellidos}" if su else "—"), sucursal=(branch.nombre if branch else "—"), metodo_pago=(pay.metodo_pago if pay else "PENDIENTE"), total=p.total, estado=p.estado, tipo_venta=p.tipo_venta) for p,pay,_,cu,su,branch in db.execute(query).all()]
+
+@commerce_router.get("/sales-history/options")
+def sales_history_options(db: Session = Depends(get_db), user: Usuario = Depends(get_current_admin)):
+    return {"clientes":[{"id":c.id_cliente,"nombre":f"{c.usuario.nombres} {c.usuario.apellidos}"} for c in db.scalars(select(Cliente)).all()],"vendedores":[{"id":u.id_usuario,"nombre":f"{u.nombres} {u.apellidos}"} for u in db.scalars(select(Usuario)).all() if u.rol.nombre in ("ADMINISTRADOR","CAJERO")],"sucursales":[{"id":s.id_sucursal,"nombre":s.nombre} for s in db.scalars(select(Sucursal)).all()]}
+
+
+@commerce_router.get("/sales-history/{order_id}")
+def sales_history_detail(order_id: int, db: Session = Depends(get_db), user: Usuario = Depends(get_current_admin)):
+    order = db.get(Pedido, order_id)
+    if not order: raise HTTPException(404, "Venta no encontrada")
+    payment = db.scalar(select(Pago).where(Pago.id_pedido == order_id))
+    return {"id_pedido":order.id_pedido,"total":order.total,"estado":order.estado,"tipo_entrega":order.tipo_entrega,"pago":record(payment) if payment else None,"entrega":{"sucursal": order.id_sucursal_entrega,"direccion":order.direccion_entrega,"referencia":order.referencia_entrega,"telefono":order.telefono_entrega},"detalles":[{"producto":d.variante.producto.nombre,"talla":d.variante.talla.nombre,"color":d.variante.color.nombre,"cantidad":d.cantidad,"precio_unitario":d.precio_unitario,"subtotal":d.cantidad*d.precio_unitario} for d in order.detalles]}

@@ -13,5 +13,7 @@ export const PROFILE_ROUTES: Routes = [
       (component) => component.ProfileEditComponent
     )
   },
+  { path: 'preferences', loadComponent: () => import('./pages/preferences/preferences.component').then(c => c.PreferencesComponent) },
+  { path: 'body', loadComponent: () => import('./pages/body-profile/body-profile.component').then(c => c.BodyProfileComponent) },
   { path: '', pathMatch: 'full', redirectTo: 'view' }
 ];

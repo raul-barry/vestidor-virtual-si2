@@ -11,5 +11,6 @@ export interface Order {
   fecha_pedido?: string;
   estado: string;
   total: string;
+  tipo_entrega?: 'RECOJO_SUCURSAL' | 'DELIVERY' | null;
   detalles?: OrderDetail[];
 }

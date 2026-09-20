@@ -17,6 +17,7 @@ import { VariantSelectorComponent } from '../../components/variant-selector/vari
 import { CatalogService } from '../../services/catalog.service';
 import { CartService } from '../../../cart/services/cart.service';
 import { API_URL } from '../../../../core/config/api.config';
+import { BackLinkComponent } from '../../../../shared/components/back-link.component';
 
 @Component({
   selector: 'app-product-detail',
@@ -29,6 +30,7 @@ import { API_URL } from '../../../../core/config/api.config';
     MatSnackBarModule,
     VariantSelectorComponent,
     AvailabilityListComponent
+    , BackLinkComponent
   ],
   templateUrl: './product-detail.component.html',
   styleUrl: './product-detail.component.scss'

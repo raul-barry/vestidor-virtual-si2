@@ -30,4 +30,5 @@ class OrderDetailResponse(BaseModel):
     fecha_pedido: datetime
     estado: str
     total: Decimal
+    tipo_entrega: str | None = None
     detalles: list[OrderItemResponse]
