@@ -16,6 +16,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+backend/private_body_images/
 
 # Angular
 node_modules/

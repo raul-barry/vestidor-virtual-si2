@@ -1,6 +1,7 @@
 import { AfterViewInit, Component, ElementRef, Input, OnChanges, OnDestroy, SimpleChanges, ViewChild } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { AvatarParameterService, BodyProfile } from '../services/avatar-parameter.service';
 
 @Component({
   selector: 'app-fitting-three-viewer',
@@ -11,6 +12,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 export class FittingThreeViewerComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() garment: any | null = null;
   @Input() accessory = false;
+  @Input() bodyProfile: BodyProfile | null = null;
   @ViewChild('canvas') canvas?: ElementRef<HTMLCanvasElement>;
   failed = false;
   private renderer?: THREE.WebGLRenderer;
@@ -23,7 +25,7 @@ export class FittingThreeViewerComponent implements AfterViewInit, OnChanges, On
 
   ngAfterViewInit(): void { this.createScene(); }
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.scene && (changes['garment'] || changes['accessory'])) this.updateLook();
+    if (this.scene && (changes['garment'] || changes['accessory'] || changes['bodyProfile'])) { this.applyBodyProfile(); this.updateLook(); }
   }
 
   private createScene(): void {
@@ -66,7 +68,10 @@ export class FittingThreeViewerComponent implements AfterViewInit, OnChanges, On
     for (const x of [-.88, .88]) { const arm = new THREE.Mesh(new THREE.CapsuleGeometry(.16, 1.2, 8, 16), skin); arm.position.set(x, 2.25, 0); arm.rotation.z = x * .12; group.add(arm); }
     for (const x of [-.3, .3]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(.25, 1.65, 8, 16), body); leg.position.set(x, .75, 0); group.add(leg); }
     this.scene.add(group);
+    this.applyBodyProfile();
   }
+
+  private applyBodyProfile(): void { const avatar=this.scene?.getObjectByName('avatar'); if(!avatar)return; const p=AvatarParameterService.from(this.bodyProfile); avatar.scale.set(p.shoulderWidth,p.heightScale,p.torsoWidth); const torso=avatar.children[2]; if(torso)torso.scale.x=p.waistWidth; const legs=avatar.children.slice(-2); legs.forEach(leg=>leg.scale.y=p.legLength); }
 
   private updateLook(): void {
     if (!this.scene) return;

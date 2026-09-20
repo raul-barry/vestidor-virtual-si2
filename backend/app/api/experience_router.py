@@ -2,6 +2,7 @@ from typing import Literal
 from app.services.experience_catalog import available_variants, variant_record
 from app.services.recommendation_service import RecommendationService
 from app.services.virtual_fitting_service import VirtualFittingService
+from app.services.fashion_assistant_service import FashionAssistantService
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -24,6 +25,13 @@ experience_router = APIRouter(prefix="/experience", tags=["Recomendaciones, vest
 
 class BranchAssignment(BaseModel):
     id_sucursal: int | None = Field(default=None, gt=0)
+
+class FashionAssistantRequest(BaseModel):
+    mensaje: str = Field(min_length=1,max_length=300)
+
+@experience_router.post("/fashion-assistant")
+def fashion_assistant(data:FashionAssistantRequest,db:Session=Depends(get_db),user:Usuario=Depends(get_current_user)):
+    return FashionAssistantService(db).ask(user.id_usuario,data.mensaje)
 
 
 @experience_router.get("/staff")

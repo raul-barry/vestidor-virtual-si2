@@ -1,0 +1,4 @@
+export interface BodyProfile {altura_cm?:number|null;ancho_hombros_cm?:number|null;pecho_cm?:number|null;cintura_cm?:number|null;cadera_cm?:number|null;largo_pierna_cm?:number|null}
+export interface AvatarParameters {heightScale:number;shoulderWidth:number;torsoWidth:number;waistWidth:number;hipWidth:number;legLength:number}
+const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
+export class AvatarParameterService { static from(profile:BodyProfile|null):AvatarParameters {return {heightScale:clamp((profile?.altura_cm??175)/175,.82,1.18),shoulderWidth:clamp((profile?.ancho_hombros_cm??45)/45,.8,1.25),torsoWidth:clamp((profile?.pecho_cm??95)/95,.82,1.25),waistWidth:clamp((profile?.cintura_cm??82)/82,.78,1.35),hipWidth:clamp((profile?.cadera_cm??98)/98,.8,1.3),legLength:clamp((profile?.largo_pierna_cm??80)/80,.8,1.22)}} }
