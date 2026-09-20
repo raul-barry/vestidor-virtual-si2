@@ -46,8 +46,8 @@ class FixtureApi {
       result = payment;
     } else if (path == '/api/payments') {
       payment = {'id_pago': 6, 'estado': 'PENDIENTE', 'metodo_pago': body['metodo_pago'], 'monto': '100.00'}; result = payment;
-    } else if (path.endsWith('/approve')) { payment!['estado'] = 'APROBADO'; orderState = 'CONFIRMADO'; result = payment; }
-    else if (path.endsWith('/reject')) { payment!['estado'] = 'RECHAZADO'; result = payment; }
+    } else if (path.endsWith('/approve')) { payment!['estado'] = 'PAGADO'; orderState = 'CONFIRMADO'; result = payment; }
+    else if (path.endsWith('/reject')) { payment!['estado'] = 'FALLIDO'; result = payment; }
     else if (path == '/api/reservations/availability') { result = [inventory]; }
     else if (path == '/api/reservations') {
       if (r.method == 'POST') reserved = true;
@@ -131,7 +131,7 @@ void main() {
     await tapText(tester, 'Cerrar sesión'); expect(store.value, isNull);
     expect(find.text('Iniciar sesión'), findsOneWidget);
   });
-  testWidgets('creates own reservation and fitting follows selected variant', (tester) async {
+  testWidgets('opens the photographic fitting flow for the selected variant', (tester) async {
     await start(tester, loggedIn: true);
     await destination(tester, 'Reservas');
     await tester.tap(find.byType(DropdownButtonFormField<int>)); await tester.pumpAndSettle();
@@ -141,8 +141,9 @@ void main() {
     await destination(tester, 'Vestidor');
     await tester.tap(find.byType(DropdownButtonFormField<int>)); await tester.pumpAndSettle();
     await tester.tap(find.text('Camisa Oxford · M · Azul').last); await tester.pumpAndSettle();
-    await tapText(tester, 'Probar prenda');
-    expect(backend.requests.where((r) => r.url.path == '/api/experience/fitting' && r.method == 'POST'), hasLength(1));
+    expect(find.textContaining('cuerpo completo o torso'), findsOneWidget);
+    expect(find.textContaining('Tomar fotograf'), findsOneWidget);
+    expect(find.textContaining('Elegir de galer'), findsOneWidget);
     expect(tester.takeException(), isNull); await tester.pumpWidget(const SizedBox());
   });
 }

@@ -7,7 +7,7 @@ from app.core.exceptions import AppException
 from app.models.pedido import Pedido
 from app.repositories.cart_repository import CartRepository
 from app.repositories.order_repository import OrderRepository
-from app.schemas.order import OrderDetailResponse, OrderItemResponse
+from app.schemas.order import CreateOrderRequest, OrderDetailResponse, OrderItemResponse
 
 
 class OrderService:
@@ -21,7 +21,7 @@ class OrderService:
             raise AppException("Cliente no encontrado", status_code=404)
         return cliente.id_cliente
 
-    def create_order_from_cart(self, id_cliente: int) -> OrderDetailResponse:
+    def create_order_from_cart(self, id_cliente: int, request: CreateOrderRequest | None = None) -> OrderDetailResponse:
         cart = self.cart_repository.get_active_cart_by_client(id_cliente)
         if cart is None:
             raise AppException("Carrito activo no encontrado", status_code=404)
@@ -34,8 +34,21 @@ class OrderService:
             if item.variante.estado != "ACTIVO" or item.variante.producto.estado != "ACTIVO":
                 raise AppException("Producto no disponible", status_code=409)
         total = sum((item.precio_unitario * item.cantidad for item in cart_items), Decimal("0"))
+        delivery_data: dict[str, object] = {}
+        if request is not None and request.tipo_entrega is not None:
+            delivery_data["tipo_entrega"] = request.tipo_entrega
+            if request.tipo_entrega == "RECOJO_SUCURSAL":
+                if self.repository.get_active_branch_by_id(request.id_sucursal_entrega) is None:
+                    raise AppException("Sucursal de recojo no encontrada o inactiva", status_code=404)
+                delivery_data["id_sucursal_entrega"] = request.id_sucursal_entrega
+            else:
+                delivery_data.update(
+                    direccion_entrega=request.direccion_entrega,
+                    referencia_entrega=request.referencia_entrega,
+                    telefono_entrega=request.telefono_entrega,
+                )
         try:
-            order = self.repository.create_order(id_cliente, total)
+            order = self.repository.create_order(id_cliente, total, **delivery_data)
             for item in cart_items:
                 self.repository.create_order_detail(
                     order.id_pedido,
@@ -73,6 +86,10 @@ class OrderService:
             estado=order.estado,
             total=order.total,
             tipo_entrega=order.tipo_entrega,
+            id_sucursal_entrega=order.id_sucursal_entrega,
+            direccion_entrega=order.direccion_entrega,
+            referencia_entrega=order.referencia_entrega,
+            telefono_entrega=order.telefono_entrega,
             detalles=[
                 OrderItemResponse(
                     producto=detail.variante.producto.nombre,

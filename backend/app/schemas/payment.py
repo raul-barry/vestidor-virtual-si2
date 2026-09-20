@@ -10,12 +10,15 @@ class CreatePaymentRequest(BaseModel):
     metodo_pago: Literal["EFECTIVO", "QR", "TARJETA"]
 
 
+PaymentState = Literal["PENDIENTE", "PROCESANDO", "PAGADO", "FALLIDO", "CANCELADO"]
+
+
 class PaymentResponse(BaseModel):
     id_pago: int
     id_pedido: int
     metodo_pago: str
     monto: Decimal
-    estado: str
+    estado: PaymentState
     fecha_pago: datetime
     proveedor: str | None = None
     referencia_externa: str | None = None

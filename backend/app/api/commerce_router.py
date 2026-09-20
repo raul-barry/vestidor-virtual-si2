@@ -254,7 +254,7 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
         db.add(MovimientoInventario(id_inventario=inv.id_inventario, tipo_movimiento="SALIDA",
             cantidad=quantity, stock_anterior=previous, stock_nuevo=inv.stock_disponible,
             motivo=f"Venta presencial pedido {order.id_pedido}", id_usuario=user.id_usuario))
-    db.add(Pago(id_pedido=order.id_pedido, metodo_pago=data.metodo_pago, monto=order.total, estado="APROBADO"))
+    db.add(Pago(id_pedido=order.id_pedido, metodo_pago=data.metodo_pago, monto=order.total, estado="PAGADO"))
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Venta presencial pedido {order.id_pedido}"))
     commit(db)
     return record(order)
@@ -262,7 +262,7 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
 
 @commerce_router.get("/returns/options")
 def return_options(db: Session = Depends(get_db), user: Usuario = Depends(get_current_admin)):
-    rows = db.scalars(select(PedidoDetalle).join(Pedido).join(Pago).where(Pago.estado == "APROBADO")).all()
+    rows = db.scalars(select(PedidoDetalle).join(Pedido).join(Pago).where(Pago.estado == "PAGADO")).all()
     return {"detalles": [dict(id_detalle=r.id_detalle, id_pedido=r.id_pedido, id_variante=r.id_variante,
                              producto=r.variante.producto.nombre, talla=r.variante.talla.nombre,
                              color=r.variante.color.nombre, cantidad=r.cantidad,
@@ -291,7 +291,7 @@ def create_return(data: ReturnRequest, db: Session = Depends(get_db), user: Usua
     detail = db.scalar(select(PedidoDetalle).where(PedidoDetalle.id_detalle == data.id_detalle).with_for_update())
     if not detail:
         raise HTTPException(404, "Detalle no encontrado")
-    payment = db.scalar(select(Pago).where(Pago.id_pedido == detail.id_pedido, Pago.estado == "APROBADO"))
+    payment = db.scalar(select(Pago).where(Pago.id_pedido == detail.id_pedido, Pago.estado == "PAGADO"))
     returned = db.scalar(select(func.coalesce(func.sum(Devolucion.cantidad), 0)).where(Devolucion.id_detalle == data.id_detalle))
     if not payment or returned + data.cantidad > detail.cantidad:
         raise HTTPException(409, "Cantidad excedida o venta sin pago aprobado")

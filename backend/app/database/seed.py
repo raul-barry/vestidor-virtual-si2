@@ -202,6 +202,18 @@ def _seed_catalog(db: Session) -> dict[str, int]:
                                   url_archivo=asset_url, estado="ACTIVO"))
             created["recursos_virtuales"] += 1
 
+        # Keep the SVG illustration for the normal catalogue. The try-on
+        # pipeline receives a separate raster cutout.
+        tryon_url = f"/api/assets/tryon/prenda-{product_index}.png"
+        tryon_resource = db.scalar(select(RecursoVirtual).where(
+            RecursoVirtual.id_producto == product.id_producto,
+            RecursoVirtual.url_archivo == tryon_url,
+        ))
+        if tryon_resource is None:
+            db.add(RecursoVirtual(id_producto=product.id_producto, tipo_recurso="tryon",
+                                  url_archivo=tryon_url, estado="ACTIVO"))
+            created["recursos_virtuales"] += 1
+
         for size_name in INITIAL_SIZES:
             sku = f"VV-{product_index:03d}-{size_name}-{color_name[:3].upper()}"
             variant = db.scalar(select(ProductoVariante).where(ProductoVariante.sku == sku))

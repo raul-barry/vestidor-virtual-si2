@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'package:image_picker/image_picker.dart';
 
 typedef Json = Map<String, dynamic>;
 
@@ -73,7 +74,7 @@ class ClientRepository {
 
   Future<Json> preparePayment(int orderId, String method) async {
     final existing = await payment(orderId);
-    if (existing != null && existing['estado'] != 'RECHAZADO') return existing;
+    if (existing != null && existing['estado'] != 'FALLIDO') return existing;
     try {
       return await object('POST', '/api/payments',
           {'id_pedido': orderId, 'metodo_pago': method});
@@ -107,6 +108,17 @@ class ClientRepository {
   Future<List<Json>> fittingVariants() => list('/api/experience/fitting');
   Future<Json> fit(int variant) =>
       object('POST', '/api/experience/fitting', {'id_variante': variant});
+  Future<Json> virtualTryOn(XFile photo, int productId, int variantId) async {
+    final extension = photo.name.split('.').last.toLowerCase();
+    final mime = switch (extension) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => throw ApiException(
+          0, 'Elige una fotografía JPG, PNG o WebP para el vestidor.'),
+    };
+    return Map<String, dynamic>.from(await api.multipart('/api/experience/virtual-try-on', {'product_id': '$productId', 'variant_id': '$variantId'}, await photo.readAsBytes(), photo.name, mime) as Map);
+  }
   Future<void> preference(String type, int product, [int? variant]) async {
     await api.request('POST', '/api/experience/preferences',
         {'tipo': type, 'id_producto': product, 'id_variante': variant});

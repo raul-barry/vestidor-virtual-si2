@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -51,6 +53,42 @@ void main() {
         client: MockClient((r) async => http.Response('not-json', 200)));
     await expectLater(
         api.request('GET', '/api/cart'), throwsA(isA<ApiException>()));
+    api.dispose();
+  });
+
+  test('multipart try-on request sends the private photo and bearer token',
+      () async {
+    final api = ApiClient(client: MockClient((request) async {
+      expect(request.url.path, '/api/experience/virtual-try-on');
+      expect(request.headers['Authorization'], 'Bearer sample');
+      expect(request.headers['content-type'], contains('multipart/form-data'));
+      expect(utf8.decode(request.bodyBytes), contains('name="product_id"'));
+      expect(utf8.decode(request.bodyBytes), contains('name="photo"'));
+      expect(utf8.decode(request.bodyBytes), contains('image/png'));
+      return http.Response('{"image_base64":"result"}', 200);
+    }));
+    api.token = 'sample';
+    final result = await api.multipart(
+        '/api/experience/virtual-try-on',
+        {'product_id': '9', 'variant_id': '3'},
+        [1, 2, 3],
+        'selfie.png',
+        'image/png');
+    expect(result, {'image_base64': 'result'});
+    api.dispose();
+  });
+
+  test('multipart 401 expires the current session', () async {
+    final api = ApiClient(client: MockClient(
+        (request) async => http.Response('{"detail":"Unauthorized"}', 401)));
+    api.token = 'sample';
+    var expired = false;
+    api.onUnauthorized = () async => expired = true;
+    await expectLater(
+        api.multipart('/api/experience/virtual-try-on', const {}, [1],
+            'selfie.jpg', 'image/jpeg'),
+        throwsA(isA<ApiException>().having((e) => e.status, 'status', 401)));
+    expect(expired, isTrue);
     api.dispose();
   });
 }

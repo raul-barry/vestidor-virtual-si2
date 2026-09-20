@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../core/config/api_config.dart';
 
 class ApiClient {
@@ -61,6 +62,31 @@ class ApiClient {
       throw ApiException(0,
           'No se pudo conectar con el servidor. Comprueba la red y la dirección de la API.');
     }
+  }
+
+  Future<dynamic> multipart(String path, Map<String, String> fields,
+      List<int> bytes, String filename, String mimeType) async {
+    final sentToken = token;
+    final request = http.MultipartRequest('POST', resolve(path));
+    if (sentToken != null) request.headers['Authorization'] = 'Bearer $sentToken';
+    request.fields.addAll(fields);
+    request.files.add(http.MultipartFile.fromBytes('photo', bytes,
+        filename: filename, contentType: MediaType.parse(mimeType)));
+    final response = await http.Response.fromStream(
+        await _client.send(request).timeout(timeout));
+    dynamic data;
+    try { data = jsonDecode(utf8.decode(response.bodyBytes)); } on FormatException {}
+    if (response.statusCode == 401 &&
+        sentToken != null &&
+        sentToken == token) {
+      await onUnauthorized?.call();
+    }
+    if (response.statusCode >= 400) {
+      final detail = data is Map ? data['detail'] ?? data['message'] : null;
+      throw ApiException(response.statusCode, detail is String ? detail : 'No se pudo generar la prueba virtual.');
+    }
+    if (data is! Map) throw ApiException(0, 'El servidor no devolvió una prueba válida.');
+    return data;
   }
 
   void dispose() => _client.close();

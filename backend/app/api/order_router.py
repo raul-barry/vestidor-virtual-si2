@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.security import require_roles
 from app.database.database import get_db
 from app.models.usuario import Usuario
-from app.schemas.order import CreateOrderResponse, OrderDetailResponse, OrderSummaryResponse
+from app.schemas.order import CreateOrderRequest, CreateOrderResponse, DeliveryBranchResponse, OrderDetailResponse, OrderSummaryResponse
 from app.services.order_service import OrderService
 
 order_router = APIRouter(prefix="/orders", tags=["Pedidos"])
@@ -26,11 +26,23 @@ def get_order_service_for_user(db: Session, current_user: Usuario) -> tuple[Orde
     },
 )
 def create_order(
+    request: CreateOrderRequest | None = None,
     db: Session = Depends(get_db), current_user: Usuario = Depends(require_roles("CLIENTE"))
 ) -> CreateOrderResponse:
     service, id_cliente = get_order_service_for_user(db, current_user)
-    order = service.create_order_from_cart(id_cliente)
+    order = service.create_order_from_cart(id_cliente, request)
     return CreateOrderResponse(id_pedido=order.id_pedido, estado=order.estado, total=order.total)
+
+
+@order_router.get("/delivery-branches", response_model=list[DeliveryBranchResponse])
+def get_delivery_branches(
+    db: Session = Depends(get_db), current_user: Usuario = Depends(require_roles("CLIENTE"))
+) -> list[DeliveryBranchResponse]:
+    service, _ = get_order_service_for_user(db, current_user)
+    return [
+        DeliveryBranchResponse(id_sucursal=branch.id_sucursal, nombre=branch.nombre, direccion=branch.direccion)
+        for branch in service.repository.get_active_branches()
+    ]
 
 
 @order_router.get("", response_model=list[OrderSummaryResponse], responses={401: {"description": "Token inválido"}})

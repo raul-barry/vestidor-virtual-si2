@@ -65,7 +65,7 @@ def create_report_data(db, admin: Usuario) -> None:
     inventory = Inventario(sucursal=branch, variante=variant, stock_disponible=3, stock_reservado=0)
     order = Pedido(cliente=client, estado="CONFIRMADO", total=Decimal("500"))
     detail = PedidoDetalle(pedido=order, variante=variant, cantidad=2, precio_unitario=Decimal("250"))
-    payment = Pago(pedido=order, metodo_pago="QR", monto=Decimal("500"), estado="APROBADO")
+    payment = Pago(pedido=order, metodo_pago="QR", monto=Decimal("500"), estado="PAGADO")
     movement = MovimientoInventario(
         inventario=inventory,
         tipo_movimiento="ENTRADA",

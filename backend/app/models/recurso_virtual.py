@@ -8,7 +8,7 @@ class RecursoVirtual(Base):
     __tablename__ = "recurso_virtual"
     __table_args__ = (
         UniqueConstraint("id_producto", "url_archivo"),
-        CheckConstraint("tipo_recurso IN ('imagen', 'modelo_3d')"),
+        CheckConstraint("tipo_recurso IN ('imagen', 'modelo_3d', 'tryon')", name="ck_recurso_virtual_tipo_recurso"),
         CheckConstraint("estado IN ('ACTIVO', 'INACTIVO')"),
     )
 

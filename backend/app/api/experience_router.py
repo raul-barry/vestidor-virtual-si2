@@ -4,7 +4,12 @@ from app.services.recommendation_service import RecommendationService
 from app.services.virtual_fitting_service import VirtualFittingService
 from app.services.fashion_assistant_service import FashionAssistantService
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import base64
+from io import BytesIO
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +24,10 @@ from app.models.bitacora import Bitacora
 from app.models.sesion import Sesion
 from app.models.sucursal import Sucursal
 from app.services.pricing_service import current_price
+from app.models.producto import Producto
+from app.models.recurso_virtual import RecursoVirtual
+from app.schemas.virtual_try_on import VirtualTryOnResponse
+from app.services.virtual_try_on_service import VirtualTryOnService
 
 experience_router = APIRouter(prefix="/experience", tags=["Recomendaciones, vestidor y seguridad"])
 
@@ -68,6 +77,95 @@ def fitting(db: Session = Depends(get_db), user: Usuario = Depends(get_current_u
 
 class FittingRequest(BaseModel):
     id_variante: int = Field(gt=0)
+
+
+_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_PHOTO_LIMIT = 8 * 1024 * 1024
+_PIL_MIME_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+_MAX_PHOTO_PIXELS = 24_000_000
+_TRY_ON_RASTER_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _try_on_resource_path(resource: RecursoVirtual | None, root: Path) -> Path | None:
+    """Return a safe raster asset path, never treating catalogue SVGs as try-on input."""
+    if resource is None:
+        return None
+    path = (root / resource.url_archivo.removeprefix("/api/assets/")).resolve()
+    if path.suffix.lower() not in _TRY_ON_RASTER_SUFFIXES:
+        return None
+    if root not in path.parents or not path.is_file():
+        return None
+    return path
+
+
+@experience_router.post("/virtual-try-on", response_model=VirtualTryOnResponse)
+async def virtual_try_on_photo(
+    product_id: int = Form(..., gt=0),
+    variant_id: int | None = Form(default=None, gt=0),
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+) -> VirtualTryOnResponse:
+    """Render an ephemeral, local photo try-on using a real catalogue image."""
+    if photo.content_type not in _PHOTO_TYPES:
+        raise HTTPException(422, "Formato no permitido. Usa JPG, PNG o WebP")
+    try:
+        payload = await photo.read(_PHOTO_LIMIT + 1)
+    finally:
+        # Starlette may spool uploads to disk; close it before any catalogue or
+        # rendering work so a customer photograph is never retained as a file.
+        await photo.close()
+    if not payload:
+        raise HTTPException(422, "Foto vacia")
+    if len(payload) > _PHOTO_LIMIT:
+        raise HTTPException(413, "La fotografía supera 8 MB" if payload else "Fotografía vacía")
+    try:
+        with Image.open(BytesIO(payload)) as image:
+            actual_mime = _PIL_MIME_TYPES.get(image.format or "")
+            if actual_mime != photo.content_type or image.width * image.height > _MAX_PHOTO_PIXELS:
+                raise HTTPException(422, "La fotografía debe ser un JPG, PNG o WebP válido de tamaño razonable")
+            image.verify()
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        raise HTTPException(422, "El contenido no corresponde a una imagen válida")
+
+    product = db.get(Producto, product_id)
+    if product is None or product.estado != "ACTIVO":
+        raise HTTPException(404, "Producto no encontrado")
+    variant = db.get(ProductoVariante, variant_id) if variant_id else None
+    if variant_id and (variant is None or variant.id_producto != product_id or variant.estado != "ACTIVO"):
+        raise HTTPException(404, "Variante no encontrada para este producto")
+    resource = db.scalar(select(RecursoVirtual).where(
+        RecursoVirtual.id_producto == product_id,
+        RecursoVirtual.tipo_recurso == "tryon",
+        RecursoVirtual.estado == "ACTIVO",
+    ).order_by(RecursoVirtual.id.desc()))
+    root = Path(__file__).resolve().parents[1] / "assets"
+    garment_path = _try_on_resource_path(resource, root)
+    if garment_path is None:
+        # A normal catalogue JPG/PNG is a compatible fallback when no
+        # dedicated cutout is available; SVG catalogue art never is.
+        catalogue_resources = db.scalars(select(RecursoVirtual).where(
+            RecursoVirtual.id_producto == product_id,
+            RecursoVirtual.tipo_recurso == "imagen",
+            RecursoVirtual.estado == "ACTIVO",
+        ).order_by(RecursoVirtual.id.desc())).all()
+        garment_path = next((
+            candidate for item in catalogue_resources
+            if (candidate := _try_on_resource_path(item, root)) is not None
+        ), None)
+    if garment_path is None:
+        raise HTTPException(422, "No existe una imagen compatible con el vestidor virtual.")
+    try:
+        result = VirtualTryOnService().render(payload, garment_path)
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(422, "No existe una imagen compatible con el vestidor virtual.")
+    db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Vestidor fotográfico: producto {product_id}"))
+    db.commit()
+    return VirtualTryOnResponse(
+        image_base64=base64.b64encode(result).decode("ascii"), id_producto=product_id,
+        id_variante=variant.id_variante if variant else None, nombre=product.nombre,
+        talla=variant.talla.nombre if variant else None, color=variant.color.nombre if variant else None,
+    )
 
 
 @experience_router.post("/fitting")

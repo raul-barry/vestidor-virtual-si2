@@ -16,8 +16,8 @@ class PaymentProviderError(RuntimeError):
 
 class StripeCardPaymentProvider:
     def __init__(self) -> None:
-        if not settings.stripe_secret_key:
-            raise PaymentProviderError("Stripe no está configurado actualmente")
+        if not settings.stripe_secret_key or not settings.stripe_publishable_key:
+            raise PaymentProviderError("Stripe no está configurado actualmente.")
         try:
             import stripe
         except ImportError as exc:  # pragma: no cover - deployment dependency

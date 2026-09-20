@@ -31,6 +31,7 @@ export class PaymentComponent implements OnInit, AfterViewInit {
   readonly paymentForm = this.formBuilder.group({ metodo_pago: ['TARJETA' as PaymentMethod, [Validators.required]] });
   order: Order | null = null; payment: Payment | null = null; isLoading = true; isSubmitting = false; cardReady = false; cardClientSecret = '';
   private stripe: Stripe | null = null; private elements: StripeElements | null = null; private paymentElementInstance: StripePaymentElement | null = null;
+  private stripeLoader = loadStripe;
 
   ngOnInit(): void {
     const orderId = Number(this.route.snapshot.paramMap.get('id_pedido'));
@@ -67,11 +68,11 @@ export class PaymentComponent implements OnInit, AfterViewInit {
     this.snackBar.open('Pago enviado. Esperando confirmación segura de Stripe…', 'Cerrar', { duration: 4000 }); this.pollStatus(0);
   }
   private mountStripeElement(publishableKey = environment.STRIPE_PUBLISHABLE_KEY): void {
-    if (!this.cardClientSecret || !publishableKey) { this.snackBar.open('Stripe no está configurado actualmente', 'Cerrar', { duration: 5000 }); return; }
-    void loadStripe(publishableKey).then(stripe => { this.stripe = stripe; if (!stripe) return; this.elements = stripe.elements({ clientSecret: this.cardClientSecret }); setTimeout(() => { if (!this.paymentElement || !this.elements || this.paymentElementInstance) return; this.paymentElementInstance = this.elements.create('payment'); this.paymentElementInstance.mount(this.paymentElement.nativeElement); this.cardReady = true; }); });
+    if (!this.cardClientSecret || !publishableKey) { this.snackBar.open('Stripe no está configurado actualmente.', 'Cerrar', { duration: 5000 }); return; }
+    void this.stripeLoader(publishableKey).then(stripe => { this.stripe = stripe; if (!stripe) return; this.elements = stripe.elements({ clientSecret: this.cardClientSecret }); setTimeout(() => { if (!this.paymentElement || !this.elements || this.paymentElementInstance) return; this.paymentElementInstance = this.elements.create('payment'); this.paymentElementInstance.mount(this.paymentElement.nativeElement); this.cardReady = true; }); });
   }
   private pollStatus(attempt: number): void {
-    if (!this.order) return; this.paymentService.getPaymentStatus(this.order.id_pedido).subscribe({ next: response => { this.payment = response.payment; if (response.payment.estado === 'PENDIENTE' && attempt < 15) { setTimeout(() => this.pollStatus(attempt + 1), 2000); return; } this.isSubmitting = false; this.snackBar.open(response.payment.estado === 'APROBADO' ? 'Pago confirmado correctamente' : `Estado del pago: ${response.payment.estado}`, 'Cerrar', { duration: 5000 }); }, error: error => this.showError(error) });
+    if (!this.order) return; this.paymentService.getPaymentStatus(this.order.id_pedido).subscribe({ next: response => { this.payment = response.payment; if (['PENDIENTE', 'PROCESANDO'].includes(response.payment.estado) && attempt < 15) { setTimeout(() => this.pollStatus(attempt + 1), 2000); return; } this.isSubmitting = false; this.snackBar.open(response.payment.estado === 'PAGADO' ? 'Pago confirmado correctamente' : `Estado del pago: ${response.payment.estado}`, 'Cerrar', { duration: 5000 }); }, error: error => this.showError(error) });
   }
   private showError(error: { error?: { detail?: string; message?: string } }): void { this.isSubmitting = false; this.snackBar.open(error.error?.detail ?? error.error?.message ?? 'No fue posible procesar el pago', 'Cerrar', { duration: 5000 }); }
   private handleLoadError(): void { this.isLoading = false; this.snackBar.open('No fue posible cargar la información de pago', 'Cerrar', { duration: 5000 }); }

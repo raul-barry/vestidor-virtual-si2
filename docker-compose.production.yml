@@ -25,6 +25,11 @@ services:
       ENVIRONMENT: production
       EXPOSE_RESET_TOKEN: 'false'
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CURRENCY: ${STRIPE_CURRENCY:-BOB}
+      FASHN_API_KEY: ${FASHN_API_KEY:-}
     depends_on:
       database:
         condition: service_healthy

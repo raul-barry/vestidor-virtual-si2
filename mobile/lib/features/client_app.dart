@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/config/api_config.dart';
 import '../services/api_client.dart';
 import '../services/client_repository.dart';
@@ -48,6 +51,11 @@ class _ClientHomeState extends State<ClientHome> {
   String profileEmail = '';
   double garmentScale = 1;
   double garmentOffset = 0;
+  final imagePicker = ImagePicker();
+  XFile? tryOnPhoto;
+  Json? tryOnResult;
+  int? tryOnProductId;
+  String? tryOnProductName;
   bool _wasSignedIn = false;
 
   @override
@@ -74,6 +82,10 @@ class _ClientHomeState extends State<ClientHome> {
     cart = {};
     product = null;
     fitting = null;
+    tryOnPhoto = null;
+    tryOnResult = null;
+    tryOnProductId = null;
+    tryOnProductName = null;
     selectedOrder = null;
     paymentInfo = null;
     variantId = null;
@@ -173,7 +185,8 @@ class _ClientHomeState extends State<ClientHome> {
         });
       case 'Vestidor':
         rows = await repository.fittingVariants();
-        if (!rows.any((r) => r['id_variante'] == variantId)) {
+        if (tryOnProductId == null &&
+            !rows.any((r) => r['id_variante'] == variantId)) {
           variantId = null;
           fitting = null;
         }
@@ -197,6 +210,10 @@ class _ClientHomeState extends State<ClientHome> {
       availability = [];
       product = null;
       fitting = null;
+      tryOnPhoto = null;
+      tryOnResult = null;
+      tryOnProductId = null;
+      tryOnProductName = null;
       selectedOrder = null;
       paymentInfo = null;
       variantId = null;
@@ -258,6 +275,67 @@ class _ClientHomeState extends State<ClientHome> {
   Future<void> add(int id, [int? count]) async {
     await repository.addItem(id, count ?? quantity);
     message = 'Prenda agregada al carrito';
+  }
+
+  Future<void> openPhotoTryOn() async {
+    final selectedProduct = product;
+    if (selectedProduct == null || variantId == null) return;
+    setState(() {
+      // Preserve the detail so the result can return to the same product.
+      page = 'Vestidor';
+      rows = [];
+      availability = [];
+      fitting = null;
+      tryOnPhoto = null;
+      tryOnResult = null;
+      tryOnProductId = selectedProduct['id_producto'] as int;
+      tryOnProductName = selectedProduct['nombre_producto'] as String? ??
+          selectedProduct['nombre'] as String?;
+    });
+    await run(load);
+  }
+
+  Future<void> pickTryOnPhoto(ImageSource source) async {
+    try {
+      final photo =
+          await imagePicker.pickImage(source: source, imageQuality: 92);
+      if (photo == null || !mounted) return;
+      final extension = photo.name.split('.').last.toLowerCase();
+      if (!const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension)) {
+        setState(() {
+          failed = true;
+          message = 'Elige una fotografía JPG, PNG o WebP para el vestidor.';
+        });
+        return;
+      }
+      setState(() {
+        tryOnPhoto = photo;
+        tryOnResult = null;
+        failed = false;
+        message = '';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          failed = true;
+          message = source == ImageSource.camera
+              ? 'No se pudo abrir la cámara. Revisa el permiso e intenta nuevamente.'
+              : 'No se pudo abrir la galería. Revisa el permiso e intenta nuevamente.';
+        });
+      }
+    }
+  }
+
+  Future<void> generateTryOn() async {
+    if (tryOnPhoto == null || tryOnProductId == null || variantId == null) {
+      throw ApiException(0, 'Selecciona una prenda y una fotografía válida.');
+    }
+    await run(() async {
+      message = 'Generando prueba virtual...';
+      tryOnResult = await repository.virtualTryOn(
+          tryOnPhoto!, tryOnProductId!, variantId!);
+      message = '';
+    });
   }
 
   Future<void> openOrder(Json order) async {
@@ -527,9 +605,10 @@ class _ClientHomeState extends State<ClientHome> {
               onPressed: busy ? null : () => go('Reservas'),
               child: const Text('Reservar por talla, color y sucursal')),
           FilledButton.tonalIcon(
-              onPressed: busy ? null : () => go('Vestidor'),
+              onPressed:
+                  busy || variantId == null ? null : () => openPhotoTryOn(),
               icon: const Icon(Icons.view_in_ar),
-              label: const Text('Probar en vestidor virtual')),
+              label: const Text('Probar prenda')),
           TextButton(
               onPressed: busy ? null : () => go('Catálogo'),
               child: const Text('Volver al catálogo'))
@@ -602,7 +681,7 @@ class _ClientHomeState extends State<ClientHome> {
                 'Pago: ${paymentInfo!['estado']} · ${paymentInfo!['metodo_pago']}'),
           if (o['estado'] == 'PENDIENTE') ...[
             const SizedBox(height: 20),
-            if (paymentInfo == null || paymentInfo!['estado'] == 'RECHAZADO')
+            if (paymentInfo == null || paymentInfo!['estado'] == 'FALLIDO')
               paymentPicker(),
             button(
                 ApiConfig.paymentDemo
@@ -692,7 +771,9 @@ class _ClientHomeState extends State<ClientHome> {
           Container(width: double.infinity, padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xff153f33), borderRadius: BorderRadius.circular(18)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text('FASHION STORE · VESTIDOR 3D', style: TextStyle(color: Color(0xffa7ddbb), fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Prueba tu próxima prenda', style: TextStyle(color: Colors.white, fontSize: 24, fontFamily: 'serif')), SizedBox(height: 8), Text('Vista orientativa por tipo y color.', style: TextStyle(color: Color(0xffdbe9e0)))])),
           DropdownButtonFormField<int>(
               key: ValueKey('fitting-$variantId'),
-              initialValue: variantId,
+              initialValue: rows.any((r) => r['id_variante'] == variantId)
+                  ? variantId
+                  : null,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Prenda compatible'),
               items: [
@@ -707,13 +788,26 @@ class _ClientHomeState extends State<ClientHome> {
                   ? null
                   : (v) => setState(() {
                         variantId = v;
+                        final selected =
+                            rows.firstWhere((r) => r['id_variante'] == v);
+                        tryOnProductId = selected['id_producto'] as int;
+                        tryOnProductName = selected['nombre'] as String?;
                         fitting = null;
+                        tryOnResult = null;
                         garmentScale = 1;
                         garmentOffset = 0;
                       })),
-          button('Probar prenda', () async {
-            fitting = await repository.fit(variantId!);
-          }, enabled: variantId != null),
+          if (tryOnProductName != null)
+            Text('Prenda seleccionada: $tryOnProductName'),
+          const Text('Usa una fotografía de cuerpo completo o torso, de frente y con buena iluminación.'),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(onPressed: busy ? null : () => pickTryOnPhoto(ImageSource.camera), icon: const Icon(Icons.camera_alt), label: const Text('Tomar fotografía')),
+            OutlinedButton.icon(onPressed: busy ? null : () => pickTryOnPhoto(ImageSource.gallery), icon: const Icon(Icons.photo_library), label: const Text('Elegir de galería')),
+          ]),
+          if (tryOnPhoto != null) ...[
+            ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(tryOnPhoto!.path), height: 240, fit: BoxFit.cover)),
+            button('Probar esta prenda', generateTryOn, enabled: variantId != null),
+          ],
           if (rows.isEmpty && !busy && !failed)
             empty('No hay prendas compatibles disponibles.'),
           const Text('Tamaño'),
@@ -738,6 +832,24 @@ class _ClientHomeState extends State<ClientHome> {
                           painter: FittingPainter(
                               fitting, garmentScale, garmentOffset),
                           child: const SizedBox.expand())))),
+          if (tryOnResult != null) ...[
+            const Text('PRUEBA VIRTUAL', style: TextStyle(fontWeight: FontWeight.bold)),
+            Image.memory(base64Decode(tryOnResult!['image_base64'] as String), fit: BoxFit.contain),
+            Text('${tryOnResult!['nombre']} · ${tryOnResult!['talla'] ?? ''} · ${tryOnResult!['color'] ?? ''}'),
+            const Text('Representación visual aproximada. El ajuste real de la prenda puede variar.'),
+            Wrap(spacing: 8, children: [
+              button('Probar otra prenda', () => setState(() {
+                    variantId = null;
+                    tryOnProductId = null;
+                    tryOnProductName = null;
+                    tryOnResult = null;
+                  }), autoRun: false),
+              button('Tomar otra foto', () => pickTryOnPhoto(ImageSource.camera), autoRun: false),
+              button('Agregar al carrito', () => add(variantId!, 1)),
+              if (product != null)
+                button('Volver al producto', () => detail(product!)),
+            ])
+          ],
           if (fitting != null) ...[
             Text(
                 '${fitting!['nombre']} · ${fitting!['talla']} · ${fitting!['color']}'),

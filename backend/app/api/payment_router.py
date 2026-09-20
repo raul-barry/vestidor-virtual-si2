@@ -121,7 +121,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
         raise HTTPException(400, "Firma de webhook Stripe inválida") from exc
 
     event_type = event["type"]
-    if event_type not in {"payment_intent.succeeded", "payment_intent.payment_failed", "payment_intent.canceled"}:
+    if event_type not in {
+        "payment_intent.processing",
+        "payment_intent.succeeded",
+        "payment_intent.payment_failed",
+        "payment_intent.canceled",
+    }:
         return {"status": "ignored"}
     intent = event["data"]["object"]
     reference = intent["id"]
@@ -129,18 +134,25 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
     payment = service.repository.get_payment_by_reference(reference)
     if payment is None:
         return {"status": "ignored"}
-    if payment.evento_externo == event["id"] or payment.estado == "APROBADO":
+    if payment.evento_externo == event["id"] or payment.estado == "PAGADO":
         return {"status": "already_processed"}
-    if event_type == "payment_intent.succeeded":
+    if event_type == "payment_intent.processing":
+        if payment.estado == "PENDIENTE":
+            payment.estado = "PROCESANDO"
+        payment.evento_externo = event["id"]
+        db.commit()
+    elif event_type == "payment_intent.succeeded":
+        if payment.estado == "CANCELADO":
+            return {"status": "already_processed"}
         payment.evento_externo = event["id"]
         db.flush()
         try:
-            service.approve_payment(payment.id_pago)
+            service.approve_payment(payment.id_pago, allow_retry_from_failed=True)
         except Exception:
             db.rollback()
             raise
     else:
-        payment.estado = "CANCELADO" if event_type.endswith("canceled") else "RECHAZADO"
+        payment.estado = "CANCELADO" if event_type.endswith("canceled") else "FALLIDO"
         payment.evento_externo = event["id"]
         db.commit()
     return {"status": "processed"}

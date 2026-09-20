@@ -65,7 +65,7 @@ class OrderAdminService:
         payment = self.repository.get_payment_by_order(id_pedido)
         if new_state == "CONFIRMADO":
             raise AppException("Confirme el pedido mediante su pago", status_code=422)
-        if new_state == "CANCELADO" and payment and payment.estado == "APROBADO":
+        if new_state == "CANCELADO" and payment and payment.estado == "PAGADO":
             raise AppException("Use devoluciones para una venta pagada", status_code=422)
 
         try:

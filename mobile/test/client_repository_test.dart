@@ -23,7 +23,7 @@ void main() {
         {'nombre': 'Camisa azul', 'precio_max': '200'});
     api.dispose();
   });
-  for (final state in ['PENDIENTE', 'APROBADO']) {
+  for (final state in ['PENDIENTE', 'PAGADO']) {
     test('reuses existing $state payment without duplicate creation', () async {
       final methods = <String>[];
       final api = ApiClient(client: MockClient((r) async {

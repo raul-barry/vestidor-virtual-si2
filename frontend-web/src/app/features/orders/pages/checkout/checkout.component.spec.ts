@@ -29,9 +29,10 @@ describe('CheckoutComponent', () => {
 
   beforeEach(async () => {
     cartService = jasmine.createSpyObj<CartService>('CartService', ['getCart']);
-    orderService = jasmine.createSpyObj<OrderService>('OrderService', ['createOrder']);
+    orderService = jasmine.createSpyObj<OrderService>('OrderService', ['createOrder', 'getDeliveryBranches']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
     cartService.getCart.and.returnValue(of(cart));
+    orderService.getDeliveryBranches.and.returnValue(of([{ id_sucursal: 1, nombre: 'Central', direccion: 'Centro' }]));
 
     TestBed.configureTestingModule({
       imports: [CheckoutComponent, NoopAnimationsModule],
@@ -51,6 +52,7 @@ describe('CheckoutComponent', () => {
 
   it('renders the cart summary', () => {
     fixture.detectChanges();
+    component.deliveryForm.controls.id_sucursal_entrega.setValue(1);
 
     expect(fixture.nativeElement.textContent).toContain('Camisa Oxford');
     expect(fixture.nativeElement.textContent).toContain('500.00');
@@ -59,16 +61,18 @@ describe('CheckoutComponent', () => {
   it('creates an order successfully', () => {
     orderService.createOrder.and.returnValue(of({ id_pedido: 1, estado: 'PENDIENTE', total: '500.00' }));
     fixture.detectChanges();
+    component.deliveryForm.controls.id_sucursal_entrega.setValue(1);
 
     component.createOrder();
 
-    expect(orderService.createOrder).toHaveBeenCalled();
+    expect(orderService.createOrder).toHaveBeenCalledWith({ tipo_entrega: 'RECOJO_SUCURSAL', id_sucursal_entrega: 1 });
     expect(component.createdOrder?.id_pedido).toBe(1);
   });
 
   it('shows an API error when order creation fails', () => {
     orderService.createOrder.and.returnValue(throwError(() => new Error('Network error')));
     fixture.detectChanges();
+    component.deliveryForm.controls.id_sucursal_entrega.setValue(1);
 
     component.createOrder();
 

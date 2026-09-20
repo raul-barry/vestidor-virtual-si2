@@ -27,7 +27,7 @@ class ReportRepository:
         products = self.db.scalar(select(func.count(Producto.id_producto))) or 0
         orders = self.db.scalar(select(func.count(Pedido.id_pedido))) or 0
         sales = self.db.scalar(
-            select(func.coalesce(func.sum(Pago.monto), Decimal("0"))).where(Pago.estado == "APROBADO")
+            select(func.coalesce(func.sum(Pago.monto), Decimal("0"))).where(Pago.estado == "PAGADO")
         ) or Decimal("0")
         low_stock = self.db.scalar(
             select(func.count(Inventario.id_inventario)).where(Inventario.stock_disponible < 5)
@@ -39,7 +39,7 @@ class ReportRepository:
             func.coalesce(func.sum(Pago.monto), Decimal("0")),
             func.count(Pedido.id_pedido),
             func.coalesce(func.avg(Pago.monto), Decimal("0")),
-        ).join(Pedido, Pago.id_pedido == Pedido.id_pedido).where(Pago.estado == "APROBADO")
+        ).join(Pedido, Pago.id_pedido == Pedido.id_pedido).where(Pago.estado == "PAGADO")
         if start is not None:
             statement = statement.where(func.date(Pedido.fecha_pedido) >= start)
         if end is not None:
@@ -51,7 +51,7 @@ class ReportRepository:
         statement = (
             select(Pedido.estado, func.count(Pedido.id_pedido))
             .join(Pago, Pago.id_pedido == Pedido.id_pedido)
-            .where(Pago.estado == "APROBADO")
+            .where(Pago.estado == "PAGADO")
             .group_by(Pedido.estado)
         )
         if start is not None:
@@ -72,7 +72,7 @@ class ReportRepository:
             .join(Pago, Pago.id_pedido == Pedido.id_pedido)
             .join(ProductoVariante, PedidoDetalle.id_variante == ProductoVariante.id_variante)
             .join(Producto, ProductoVariante.id_producto == Producto.id_producto)
-            .where(Pago.estado == "APROBADO")
+            .where(Pago.estado == "PAGADO")
             .group_by(Producto.id_producto, Producto.nombre)
             .order_by(func.sum(PedidoDetalle.cantidad).desc())
         )
@@ -91,7 +91,7 @@ class ReportRepository:
             .join(ProductoVariante, PedidoDetalle.id_variante == ProductoVariante.id_variante)
             .join(Producto, ProductoVariante.id_producto == Producto.id_producto)
             .join(Categoria, Producto.id_categoria == Categoria.id_categoria)
-            .where(Pago.estado == "APROBADO")
+            .where(Pago.estado == "PAGADO")
             .group_by(Categoria.id_categoria, Categoria.nombre)
             .order_by(func.sum(PedidoDetalle.cantidad).desc())
         )

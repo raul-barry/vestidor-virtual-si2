@@ -27,6 +27,11 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@database:5432/${POSTGRES_DB:-vestidor_virtual}
       SECRET_KEY: ${SECRET_KEY:-change-me-before-production}
       EXPOSE_RESET_TOKEN: ${EXPOSE_RESET_TOKEN:-true}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CURRENCY: ${STRIPE_CURRENCY:-BOB}
+      FASHN_API_KEY: ${FASHN_API_KEY:-}
     volumes:
       - ./backend/app:/app/app
     networks:
