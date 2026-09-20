@@ -50,7 +50,7 @@ import { ApiService } from '../../core/services/api.service';
       <div class="table-scroll" role="region" aria-label="Tabla de datos" tabindex="0"><table><tr><th>Prenda</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>@for(l of lines; track l.id_inventario){<tr><td>{{l.producto}} · {{l.talla}} · {{l.color}} · {{l.sucursal}}</td><td>{{l.cantidad}}</td><td>Bs {{l.cantidad * l.precio | number:'1.2-2'}}</td><td><button (click)="removeLine(l.id_inventario)" [disabled]="busy">Quitar</button></td></tr>}</table></div>
       <p>Total: Bs {{total | number:'1.2-2'}}</p>
       <label>Método de pago<select [(ngModel)]="paymentMethod"><option>EFECTIVO</option><option>QR</option><option>TARJETA</option></select></label>
-      <button (click)="sell()" [disabled]="busy || !customerId || !lines.length">Confirmar venta y pago</button>
+      <button (click)="sell()" [disabled]="busy || !lines.length">Confirmar venta y pago</button>
     }
     @if(mode === 'returns') {
       <form #returnForm="ngForm" (ngSubmit)="saveReturn()">
@@ -104,7 +104,7 @@ export class CommerceComponent implements OnInit {
   addLine():void {const i=this.inventory.find(i=>i.id_inventario===this.inventoryId);if(!i || !Number.isInteger(this.quantity) || this.quantity<1)return;const existing=this.lines.find(l=>l.id_inventario===i.id_inventario);if((existing?.cantidad||0)+this.quantity>i.stock){this.message='Stock insuficiente';return;}if(this.lines.length && this.lines[0].id_sucursal!==i.id_sucursal){this.message='Seleccione una sola sucursal por venta';return;}if(existing)existing.cantidad+=this.quantity;else this.lines.push({...i,cantidad:this.quantity});}
   removeLine(id:number):void {this.lines=this.lines.filter(l=>l.id_inventario!==id);}
   get total():number {return this.lines.reduce((sum,l)=>sum+l.cantidad*Number(l.precio),0);}
-  sell():void {this.write('pos',{id_cliente:this.customerId,metodo_pago:this.paymentMethod,items:this.lines.map(l=>({id_inventario:l.id_inventario,cantidad:l.cantidad}))},false,r=>{this.lines=[];this.message=`Venta #${r.id_pedido} registrada. Total Bs ${r.total}`;});}
+  sell():void {this.write('pos',{id_cliente:this.customerId || null,tipo_cliente:this.customerId?'CLIENTE_REGISTRADO':'CONSUMIDOR_FINAL',metodo_pago:this.paymentMethod,tipo_entrega:'RECOJO_SUCURSAL',items:this.lines.map(l=>({id_inventario:l.id_inventario,cantidad:l.cantidad}))},false,r=>{this.lines=[];this.message=`Venta #${r.id_pedido} registrada. Total Bs ${r.total}`;});}
   get returnInventory():any[] {const detail=this.details.find(d=>d.id_detalle===this.returnData.id_detalle);return this.inventory.filter(i=>i.id_variante===detail?.id_variante);}
   saveReturn():void {this.write('returns',this.returnData,false,()=>{this.returnData={id_detalle:0,id_inventario:0,cantidad:1,motivo:''};});}
   setReturnStatus(row:any,status:string):void {this.write(`returns/${row.id_devolucion}/status`,{estado:status},true);}

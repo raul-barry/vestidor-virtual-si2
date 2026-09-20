@@ -23,6 +23,7 @@ class ProductCatalogResponse(BaseModel):
     estado: str
     categoria: CategoryResponse
     variantes: list[VariantResponse]
+    imagen_url: str | None = None
 
 
 class ProductVariantsResponse(BaseModel):

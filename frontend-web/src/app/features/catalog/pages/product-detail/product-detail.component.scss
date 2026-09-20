@@ -50,7 +50,8 @@ h1 {
 .purchase-card h2 { margin: 0 0 8px; font-size: clamp(1.5rem,3vw,2.2rem); }
 .product-price { display:block; color:var(--primary); font-size:1.5rem; margin-bottom:14px; }
 .product-description { color: var(--muted); margin: 0 0 20px; }
-.fitting-cta { margin: 12px 0; width: 100%; border-color: var(--primary) !important; }
+.fitting-cta,.cart-cta { display:flex; justify-content:center; margin: 12px 0; width: 100%; }
+.cart-cta { border-color: var(--primary) !important; color:var(--primary) !important; }
 
 mat-card-content {
   padding: 1rem;

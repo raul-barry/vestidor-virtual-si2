@@ -9,6 +9,15 @@ from app.services.variant_admin_service import VariantAdminService
 variant_admin_router = APIRouter(prefix="/admin", tags=["Administración de variantes"])
 
 
+@variant_admin_router.get("/variants", response_model=list[VariantAdminResponse])
+def list_all_variants(db: Session = Depends(get_db), _: object = Depends(get_current_admin)) -> list[VariantAdminResponse]:
+    from app.models.producto_variante import ProductoVariante
+    from sqlalchemy import select
+    rows = db.scalars(select(ProductoVariante).order_by(ProductoVariante.id_variante)).all()
+    return [VariantAdminResponse(id_variante=row.id_variante, sku=row.sku, producto=row.producto.nombre,
+                                talla=row.talla.nombre, color=row.color.nombre, estado=row.estado) for row in rows]
+
+
 @variant_admin_router.get("/products/{id_producto}/variants", response_model=list[VariantAdminResponse])
 def list_variants(
     id_producto: int,

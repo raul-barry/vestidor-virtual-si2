@@ -16,6 +16,7 @@ import { AvailabilityListComponent } from '../../components/availability-list/av
 import { VariantSelectorComponent } from '../../components/variant-selector/variant-selector.component';
 import { CatalogService } from '../../services/catalog.service';
 import { CartService } from '../../../cart/services/cart.service';
+import { API_URL } from '../../../../core/config/api.config';
 
 @Component({
   selector: 'app-product-detail',
@@ -46,6 +47,7 @@ export class ProductDetailComponent implements OnInit {
   availability: ProductAvailabilityResponse | null = null;
   price = '';
   description = '';
+  imageUrl = 'assets/catalog/editorial-menswear.png';
   isLoading = true;
   selectedVariant: ProductoVariante | null = null;
   isAddingToCart = false;
@@ -69,6 +71,7 @@ export class ProductDetailComponent implements OnInit {
         const product = response.products.find((item) => item.id_producto === productId);
         this.price = product?.precio_base ?? '';
         this.description = product?.descripcion ?? '';
+        this.imageUrl = this.resolveImageUrl(product?.imagen_url);
         this.isLoading = false;
         this.recordPreference('vista');
       },
@@ -116,5 +119,16 @@ export class ProductDetailComponent implements OnInit {
   private handleError(): void {
     this.isLoading = false;
     this.snackBar.open('No fue posible cargar el detalle del producto', 'Cerrar', { duration: 5000 });
+  }
+
+  useFallbackImage(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    image.onerror = null;
+    image.src = 'assets/catalog/editorial-menswear.png';
+  }
+
+  private resolveImageUrl(imageUrl?: string | null): string {
+    if (!imageUrl) return 'assets/catalog/editorial-menswear.png';
+    return imageUrl.startsWith('http') ? imageUrl : `${API_URL}${imageUrl}`;
   }
 }

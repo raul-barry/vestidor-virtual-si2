@@ -6,7 +6,7 @@ export const ADMIN_GROUPS: NavigationGroup[] = [
   { label: 'Catálogo', links: [link('Productos', '/admin/products'), link('Categorías', '/admin/categories'), link('Variantes', '/admin/variants'), link('Tallas', '/admin/sizes'), link('Colores', '/admin/colors'), link('Colecciones', '/admin/collections')] },
   { label: 'Inventario', links: [link('Existencias', '/admin/inventory'), link('Proveedores', '/admin/suppliers'), link('Sucursales', '/admin/branches'), link('Ciudades', '/admin/cities')] },
   { label: 'Ventas', links: [link('Venta presencial', '/pos'), link('Pedidos', '/admin/orders'), link('Reservas', '/reservations'), link('Promociones', '/admin/promotions'), link('Devoluciones', '/admin/returns')] },
-  { label: 'Usuarios', links: [link('Usuarios', '/admin/users'), link('Seguridad', '/admin/security')] },
+  { label: 'Usuarios', links: [link('Usuarios', '/admin/users'), link('Roles y permisos', '/admin/roles'), link('Seguridad', '/admin/security')] },
   { label: 'Reportes', links: [link('Reportes', '/admin/reports'), link('Bitácora', '/admin/audit')] }
 ];
 export function normalizeRole(role: string | null): string { return (role ?? '').trim().toUpperCase(); }

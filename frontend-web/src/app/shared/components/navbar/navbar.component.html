@@ -5,6 +5,8 @@
     <div class="account">
       @if (staff) { <span class="role-label">{{ roleLabel }}</span> }
       @if (signedIn) { <button mat-stroked-button type="button" (click)="signOut.emit()">Cerrar sesión</button> }
+      @else if (authPage === 'login') { <a mat-flat-button color="primary" routerLink="/auth/register">Crear cuenta</a> }
+      @else if (authPage === 'register') { <a mat-button routerLink="/auth/login">Iniciar sesión</a> }
       @else { <a mat-button routerLink="/auth/login">Iniciar sesión</a><a mat-flat-button color="primary" routerLink="/auth/register">Crear cuenta</a> }
     </div>
   </div>

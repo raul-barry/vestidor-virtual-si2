@@ -195,16 +195,31 @@ class SaleLine(BaseModel):
 
 
 class SaleRequest(BaseModel):
-    id_cliente: int = Field(gt=0)
+    id_cliente: int | None = Field(default=None, gt=0)
+    tipo_cliente: Literal["CLIENTE_REGISTRADO", "CONSUMIDOR_FINAL"] = "CLIENTE_REGISTRADO"
     metodo_pago: Literal["EFECTIVO", "QR", "TARJETA"]
+    nit_ci: str | None = Field(default=None, max_length=30)
+    razon_social: str | None = Field(default=None, max_length=150)
+    tipo_entrega: Literal["RECOJO_SUCURSAL", "DELIVERY"] = "RECOJO_SUCURSAL"
+    id_sucursal_entrega: int | None = Field(default=None, gt=0)
+    direccion_entrega: str | None = Field(default=None, max_length=255)
+    referencia_entrega: str | None = Field(default=None, max_length=255)
+    telefono_entrega: str | None = Field(default=None, max_length=30)
     items: list[SaleLine] = Field(min_length=1, max_length=100)
 
 
 @commerce_router.post("/pos", status_code=201)
 def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depends(cashier)):
-    customer = db.get(Cliente, data.id_cliente)
-    if not customer or customer.usuario.estado.upper() != "ACTIVO":
-        raise HTTPException(404, "Cliente no encontrado")
+    if data.tipo_cliente == "CLIENTE_REGISTRADO":
+        customer = db.get(Cliente, data.id_cliente)
+        if not customer or customer.usuario.estado.upper() != "ACTIVO":
+            raise HTTPException(404, "Cliente registrado no encontrado")
+    elif data.id_cliente is not None:
+        raise HTTPException(422, "Consumidor final no debe asociarse a un cliente registrado")
+    if bool(data.nit_ci) != bool(data.razon_social):
+        raise HTTPException(422, "NIT/CI y razón social deben registrarse juntos")
+    if data.tipo_entrega == "DELIVERY" and (not data.direccion_entrega or not data.telefono_entrega):
+        raise HTTPException(422, "Delivery requiere dirección y teléfono")
     quantities = {}
     for line in data.items:
         quantities[line.id_inventario] = quantities.get(line.id_inventario, 0) + line.cantidad
@@ -217,7 +232,18 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
         rows.append((inv, quantity, current_price(db, inv.variante.producto)))
     if len({inv.id_sucursal for inv, _, _ in rows}) != 1:
         raise HTTPException(422, "Seleccione productos de una sola sucursal")
-    order = Pedido(id_cliente=data.id_cliente, estado="ENTREGADO", total=sum(price * qty for _, qty, price in rows))
+    delivery_branch = data.id_sucursal_entrega or rows[0][0].id_sucursal
+    if data.tipo_entrega == "RECOJO_SUCURSAL" and not db.get(Sucursal, delivery_branch):
+        raise HTTPException(404, "Sucursal de recojo no encontrada")
+    order = Pedido(
+        id_cliente=data.id_cliente, estado="ENTREGADO" if data.metodo_pago == "EFECTIVO" else "PENDIENTE",
+        total=sum(price * qty for _, qty, price in rows), tipo_cliente=data.tipo_cliente,
+        tipo_venta="PRESENCIAL", nit_ci=data.nit_ci, razon_social=data.razon_social,
+        tipo_entrega=data.tipo_entrega, id_sucursal_entrega=delivery_branch if data.tipo_entrega == "RECOJO_SUCURSAL" else None,
+        direccion_entrega=data.direccion_entrega if data.tipo_entrega == "DELIVERY" else None,
+        referencia_entrega=data.referencia_entrega if data.tipo_entrega == "DELIVERY" else None,
+        telefono_entrega=data.telefono_entrega if data.tipo_entrega == "DELIVERY" else None,
+    )
     db.add(order)
     db.flush()
     for inv, quantity, price in rows:
@@ -302,4 +328,13 @@ def update_return_status(
 
 @commerce_router.get("/audit")
 def audit(db: Session = Depends(get_db), user: Usuario = Depends(get_current_admin)):
-    return [record(r) for r in db.scalars(select(Bitacora).order_by(Bitacora.nro_bitacora.desc()).limit(500)).all()]
+    return [
+        {
+            **record(row),
+            "usuario": f"{row.usuario.nombres} {row.usuario.apellidos}",
+            "correo": row.usuario.correo,
+            "rol": row.usuario.rol.nombre,
+            "resultado": "EXITOSO",
+        }
+        for row in db.scalars(select(Bitacora).order_by(Bitacora.nro_bitacora.desc()).limit(500)).all()
+    ]

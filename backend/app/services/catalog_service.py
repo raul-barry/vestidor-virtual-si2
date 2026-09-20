@@ -1,9 +1,11 @@
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.models.producto import Producto
+from app.models.recurso_virtual import RecursoVirtual
 from app.repositories.catalog_repository import CatalogRepository
 from app.services.pricing_service import current_price
 from app.schemas.catalog import (
@@ -78,6 +80,17 @@ class CatalogService:
         )
 
     def _to_response(self, products: list[Producto]) -> list[ProductCatalogResponse]:
+        product_ids = [product.id_producto for product in products]
+        image_by_product = {
+            resource.id_producto: resource.url_archivo
+            for resource in self.repository.db.scalars(
+                select(RecursoVirtual).where(
+                    RecursoVirtual.id_producto.in_(product_ids),
+                    RecursoVirtual.tipo_recurso == "imagen",
+                    RecursoVirtual.estado == "ACTIVO",
+                ).order_by(RecursoVirtual.id)
+            )
+        } if product_ids else {}
         return [
             ProductCatalogResponse(
                 id_producto=product.id_producto,
@@ -98,6 +111,7 @@ class CatalogService:
                     )
                     for variant in product.variantes if variant.estado == "ACTIVO"
                 ],
+                imagen_url=image_by_product.get(product.id_producto),
             )
             for product in products if product.estado == "ACTIVO"
         ]

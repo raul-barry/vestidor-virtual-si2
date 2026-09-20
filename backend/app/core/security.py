@@ -73,6 +73,8 @@ def get_current_user(
         )
     if usuario.estado.upper() != "ACTIVO":
         raise HTTPException(status_code=403, detail="Usuario inactivo")
+    if getattr(usuario.rol, "estado", "ACTIVO").upper() != "ACTIVO":
+        raise HTTPException(status_code=403, detail="Rol inactivo")
     session = db.scalar(select(Sesion).where(Sesion.id_usuario == user_id,
         Sesion.token_jwt == credentials.credentials, Sesion.estado == "ACTIVA"))
     if session is None:

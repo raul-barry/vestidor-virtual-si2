@@ -9,7 +9,7 @@ import { isStaff, normalizeRole } from './shared/navigation/navigation.config';
   selector: 'app-root', standalone: true, imports: [RouterOutlet, NavbarComponent, AdminSidebarComponent],
   template: `
     <a class="skip-link" href="#page-content">Saltar al contenido</a>
-    <app-navbar [signedIn]="auth.hasSession()" [staff]="staff" [role]="role" [expanded]="menuOpen" (toggleMenu)="menuOpen = !menuOpen" (signOut)="logout()" />
+    <app-navbar [signedIn]="auth.hasSession()" [staff]="staff" [role]="role" [expanded]="menuOpen" [authPage]="authPage" (toggleMenu)="menuOpen = !menuOpen" (signOut)="logout()" />
     <div class="application-shell" [class.workspace]="staff">
       @if (staff) {
         <aside id="workspace-navigation" class="workspace-navigation" [class.mobile-open]="menuOpen" (keydown.escape)="closeMenu()">
@@ -27,6 +27,7 @@ export class AppComponent {
   menuOpen = false;
   get role(): string { return normalizeRole(this.auth.getRoleFromToken(this.tokens.getToken() ?? '')); }
   get staff(): boolean { return this.auth.hasSession() && isStaff(this.role); }
+  get authPage(): 'login' | 'register' | '' { return this.router.url.startsWith('/auth/login') ? 'login' : this.router.url.startsWith('/auth/register') ? 'register' : ''; }
   closeMenu(): void { this.menuOpen = false; }
   logout(): void { this.closeMenu(); this.auth.logout().subscribe({ next: () => this.router.navigate(['/auth/login']), error: () => this.router.navigate(['/auth/login']) }); }
 }

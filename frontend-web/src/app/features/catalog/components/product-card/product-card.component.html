@@ -1,6 +1,6 @@
 <mat-card class="product-card" role="button" tabindex="0" (click)="openProduct()" (keydown.enter)="openProduct()" (keydown.space)="$event.preventDefault(); openProduct()">
   <div class="product-image" [class]="imageClass" role="img" [attr.aria-label]="'Imagen editorial de ' + producto.nombre">
-    <img src="assets/catalog/editorial-menswear.png" [alt]="producto.nombre" />
+    <img [src]="imageUrl" [alt]="producto.nombre" (error)="useFallbackImage($event)" />
     <span class="product-tag">NUEVA COLECCIÓN</span>
     <span class="quick-view">Ver detalle →</span>
   </div>

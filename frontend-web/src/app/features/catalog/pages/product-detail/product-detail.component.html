@@ -12,7 +12,7 @@
 
     <section class="detail-grid">
       <section class="detail-visual" aria-label="Galería de producto">
-        <div class="gallery-main"><img src="assets/catalog/editorial-menswear.png" [alt]="variants.nombre_producto" /></div>
+        <div class="gallery-main"><img [src]="imageUrl" [alt]="variants.nombre_producto" (error)="useFallbackImage($event)" /></div>
         <div class="gallery-notes"><span>FASHION STORE · VESTIDOR 3D</span><span>Disponibilidad en tiempo real</span></div>
       </section>
       <mat-card class="purchase-card">
@@ -23,10 +23,10 @@
           @if(price){<strong class="product-price">Bs {{price}}</strong>}
           <p class="product-description">{{description || 'Selecciona tu variante para comprobar disponibilidad y visualizar la prenda en el vestidor virtual.'}}</p>
           <app-variant-selector [product]="variants" (selectedVariantChange)="selectVariant($event)" />
-          <button mat-flat-button color="primary" type="button" [disabled]="isAddingToCart" (click)="addToCart()">
+          <a class="fitting-cta" mat-flat-button color="primary" routerLink="/experience/fitting" [queryParams]="{producto_id: productId, variante_id: selectedVariant?.id_variante}">✦ Probar en vestidor virtual 3D</a>
+          <button class="cart-cta" mat-stroked-button type="button" [disabled]="isAddingToCart" (click)="addToCart()">
             {{ isAddingToCart ? 'Agregando...' : 'Agregar al carrito' }}
           </button>
-          <a class="fitting-cta" mat-stroked-button routerLink="/experience/fitting" [queryParams]="{producto_id: productId, variante_id: selectedVariant?.id_variante}">✦ Probar en vestidor virtual 3D</a>
           @if (hasSession()) {<button mat-button type="button" (click)="recordPreference('favorita')">Marcar categoría favorita</button>}
         </mat-card-content>
       </mat-card>

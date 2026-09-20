@@ -49,6 +49,13 @@ class UserAdminRepository:
         self.db.refresh(user)
         return user
 
+    def update_user(self, user: Usuario, **values: object) -> Usuario:
+        for field, value in values.items():
+            setattr(user, field, value)
+        self.db.flush()
+        self.db.refresh(user)
+        return user
+
     def count_admin_users(self) -> int:
         statement = (
             select(func.count(Usuario.id_usuario))

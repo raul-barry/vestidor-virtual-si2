@@ -11,6 +11,7 @@ export class NavbarComponent {
   @Input() staff = false;
   @Input() role = '';
   @Input() expanded = false;
+  @Input() authPage: 'login' | 'register' | '' = '';
   @Output() toggleMenu = new EventEmitter<void>();
   @Output() signOut = new EventEmitter<void>();
   readonly customerLinks = CUSTOMER_LINKS;

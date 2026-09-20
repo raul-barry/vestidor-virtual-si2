@@ -19,6 +19,9 @@ from app.api.cart_router import cart_router
 from app.api.order_router import order_router
 from app.api.payment_router import payment_router
 from app.api.user_router import user_router
+from app.api.body_profile_router import body_profile_router
+from app.api.admin.role_admin_router import role_admin_router
+from app.api.admin.commercial_master_admin_router import commercial_master_admin_router
 
 api_router = APIRouter()
 api_router.include_router(reservation_router, prefix="/api")
@@ -40,6 +43,9 @@ api_router.include_router(cart_router, prefix="/api")
 api_router.include_router(order_router, prefix="/api")
 api_router.include_router(payment_router, prefix="/api")
 api_router.include_router(user_router, prefix="/api")
+api_router.include_router(body_profile_router, prefix="/api")
+api_router.include_router(role_admin_router, prefix="/api")
+api_router.include_router(commercial_master_admin_router, prefix="/api")
 
 
 @api_router.get("/")

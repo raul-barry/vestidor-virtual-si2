@@ -1,8 +1,8 @@
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router, UrlTree } from '@angular/router';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AuthService, LoginResponse } from '../../services/auth.service';
 import { LoginComponent } from './login.component';
 
@@ -15,7 +15,10 @@ describe('LoginComponent', () => {
 
   beforeEach(async () => {
     authService = jasmine.createSpyObj<AuthService>('AuthService', ['login', 'getRoleFromToken']);
-    router = jasmine.createSpyObj<Router>('Router', ['navigate']);
+    router = jasmine.createSpyObj<Router>('Router', ['navigate', 'createUrlTree', 'serializeUrl']);
+    router.createUrlTree.and.returnValue(new UrlTree());
+    router.serializeUrl.and.returnValue('');
+    Object.assign(router, { events: new Subject() });
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
     TestBed.configureTestingModule({
@@ -23,6 +26,7 @@ describe('LoginComponent', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: Router, useValue: router },
+        { provide: ActivatedRoute, useValue: {} },
         { provide: MatSnackBar, useValue: snackBar }
       ]
     }).overrideComponent(LoginComponent, {

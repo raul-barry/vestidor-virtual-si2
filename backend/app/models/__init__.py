@@ -14,12 +14,14 @@ from app.models.pedido_detalle import PedidoDetalle
 from app.models.pago import Pago
 from app.models.producto import Producto
 from app.models.producto_variante import ProductoVariante
-from app.models.rol import Rol
+from app.models.rol import Permiso, Rol, RolPermiso
 from app.models.sesion import Sesion
 from app.models.sucursal import Sucursal
 from app.models.talla import Talla
 from app.models.token_recuperacion import TokenRecuperacion
 from app.models.usuario import Usuario
+from app.models.organizacion import Organizacion
+from app.models.perfil_corporal import PerfilCorporal
 
 __all__ = [
     "Base",
@@ -37,11 +39,15 @@ __all__ = [
     "Producto",
     "ProductoVariante",
     "Rol",
+    "Permiso",
+    "RolPermiso",
     "Sesion",
     "Sucursal",
     "Talla",
     "TokenRecuperacion",
     "Usuario",
+    "Organizacion",
+    "PerfilCorporal",
 ]
 
 from app.models.recurso_virtual import RecursoVirtual

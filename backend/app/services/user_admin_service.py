@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.repositories.user_admin_repository import UserAdminRepository
 from app.schemas.user_admin import UserAdminResponse
 from app.schemas.user_admin import CreateUserAdminRequest
+from app.schemas.user_admin import UpdateUserAdminRequest
 from app.core.security import hash_password
 
 
@@ -80,6 +81,24 @@ class UserAdminService:
             self.repository.db.rollback()
             raise AppException("No se pudo actualizar el estado del usuario", status_code=500) from exc
 
+    def update_user(self, id_usuario: int, request: UpdateUserAdminRequest, admin_id: int) -> UserAdminResponse:
+        user = self._get_user(id_usuario)
+        values = request.model_dump(exclude_unset=True)
+        if "correo" in values:
+            existing = self.repository.db.scalar(select(Usuario).where(Usuario.correo == values["correo"]))
+            if existing and existing.id_usuario != id_usuario:
+                raise AppException("El correo ya se encuentra registrado", status_code=409)
+        if values.get("id_sucursal") is not None and user.rol.nombre not in ("ENCARGADO_SUCURSAL", "CAJERO"):
+            raise AppException("La sucursal solo aplica a personal de tienda", status_code=422)
+        try:
+            self.repository.update_user(user, **values)
+            self.repository.create_audit(admin_id, f"Administrador {admin_id} editó usuario {id_usuario}")
+            self.repository.db.commit()
+            return self._to_response(self._get_user(id_usuario))
+        except SQLAlchemyError as exc:
+            self.repository.db.rollback()
+            raise AppException("No se pudo editar el usuario", status_code=500) from exc
+
     def change_role(self, id_usuario: int, id_rol: int, admin_id: int) -> UserAdminResponse:
         if id_usuario == admin_id:
             raise AppException("No se permite cambiar el rol del administrador actual", status_code=422)
@@ -87,6 +106,8 @@ class UserAdminService:
         role = self.repository.get_role_by_id(id_rol)
         if role is None:
             raise AppException("Rol no encontrado", status_code=404)
+        if role.estado != "ACTIVO":
+            raise AppException("No se puede asignar un rol inactivo", status_code=422)
         if (
             user.rol.nombre == "ADMINISTRADOR"
             and role.nombre != "ADMINISTRADOR"
@@ -128,4 +149,6 @@ class UserAdminService:
             telefono=user.telefono,
             estado=user.estado.upper(),
             rol=user.rol.nombre,
+            id_sucursal=user.id_sucursal,
+            sucursal=user.sucursal.nombre if user.sucursal else None,
         )

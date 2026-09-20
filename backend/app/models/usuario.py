@@ -27,3 +27,4 @@ class Usuario(Base):
     sesiones: Mapped[list["Sesion"]] = relationship(back_populates="usuario")
     tokens_recuperacion: Mapped[list["TokenRecuperacion"]] = relationship(back_populates="usuario")
     bitacoras: Mapped[list["Bitacora"]] = relationship(back_populates="usuario")
+    sucursal: Mapped["Sucursal | None"] = relationship()

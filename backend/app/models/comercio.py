@@ -18,6 +18,11 @@ class Proveedor(Base):
     id_proveedor: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(150), unique=True)
     contacto: Mapped[str] = mapped_column(String(255), default="")
+    descripcion: Mapped[str] = mapped_column(String(500), default="")
+    persona_contacto: Mapped[str] = mapped_column(String(150), default="")
+    telefono: Mapped[str] = mapped_column(String(30), default="")
+    correo: Mapped[str] = mapped_column(String(255), default="")
+    direccion: Mapped[str] = mapped_column(String(255), default="")
     estado: Mapped[str] = mapped_column(String(30), default="ACTIVO")
 
 
@@ -26,6 +31,10 @@ class Coleccion(Base):
     id_coleccion: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(150), unique=True)
     descripcion: Mapped[str] = mapped_column(String(255), default="")
+    temporada: Mapped[str] = mapped_column(String(80), default="")
+    anio: Mapped[int | None]
+    fecha_inicio: Mapped[date | None] = mapped_column(Date)
+    fecha_fin: Mapped[date | None] = mapped_column(Date)
     estado: Mapped[str] = mapped_column(String(30), default="ACTIVO")
 
 

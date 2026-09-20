@@ -37,3 +37,4 @@ class ProductAdminResponse(BaseModel):
     precio_base: Decimal
     estado: str
     categoria: AdminCategoryResponse
+    imagen_url: str | None = None

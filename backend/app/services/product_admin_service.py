@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.models.producto import Producto
+from app.models.recurso_virtual import RecursoVirtual
+from sqlalchemy import select
 from app.repositories.product_admin_repository import ProductAdminRepository
 from app.schemas.product_admin import (
     AdminCategoryResponse,
@@ -76,8 +78,12 @@ class ProductAdminService:
             raise AppException("Producto no encontrado", status_code=404)
         return product
 
-    @staticmethod
-    def _to_response(product: Producto) -> ProductAdminResponse:
+    def _to_response(self, product: Producto) -> ProductAdminResponse:
+        image = self.repository.db.scalar(select(RecursoVirtual).where(
+            RecursoVirtual.id_producto == product.id_producto,
+            RecursoVirtual.tipo_recurso == "imagen",
+            RecursoVirtual.estado == "ACTIVO",
+        ).order_by(RecursoVirtual.id.desc()))
         return ProductAdminResponse(
             id_producto=product.id_producto,
             nombre=product.nombre,
@@ -88,4 +94,5 @@ class ProductAdminService:
                 id_categoria=product.categoria.id_categoria,
                 nombre=product.categoria.nombre,
             ),
+            imagen_url=image.url_archivo if image else None,
         )
