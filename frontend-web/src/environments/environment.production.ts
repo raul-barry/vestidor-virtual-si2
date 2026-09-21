@@ -1,1 +1,5 @@
-export const environment = { production: true, API_URL: window.location.origin, STRIPE_PUBLISHABLE_KEY: '' };
+export const environment = {
+  production: true,
+  API_URL: 'https://vestidor-virtual-backend.onrender.com',
+  STRIPE_PUBLISHABLE_KEY: ''
+};
