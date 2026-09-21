@@ -5,7 +5,7 @@
 
 .register-page {
   align-items: center;
-  background: linear-gradient(145deg, #eff6ff 0%, #f8fafc 50%, #f0fdf4 100%);
+  background: linear-gradient(145deg, var(--primary-soft) 0%, var(--canvas) 50%, #f0fdf4 100%);
   display: flex;
   justify-content: center;
   min-height: 100vh;

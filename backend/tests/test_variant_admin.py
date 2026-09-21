@@ -3,7 +3,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from conftest import session_token
 from app.main import app
 from app.models.categoria import Categoria
 from app.models.color import Color
@@ -29,7 +29,7 @@ def create_headers(db, role_name: str, correo: str) -> dict[str, str]:
     )
     db.add(user)
     db.commit()
-    token = create_access_token({"id_usuario": user.id_usuario, "rol": role.nombre})
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role.nombre})
     return {"Authorization": f"Bearer {token}"}
 
 

@@ -1,11 +1,22 @@
 const fs = require('fs');
 const path = require('path');
 
-let apiUrl = process.env.API_URL || process.env.BACKEND_URL || 'http://localhost:8000';
+const isRender = Boolean(process.env.RENDER);
+let apiUrl = process.env.API_URL || process.env.BACKEND_URL || '';
+
 if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+  if (!apiUrl.includes('.')) {
+    apiUrl = `${apiUrl}.onrender.com`;
+  }
   apiUrl = `https://${apiUrl}`;
 }
-const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+
+if (!apiUrl) {
+  apiUrl = isRender ? 'https://vestidor-virtual-backend.onrender.com' : 'http://localhost:8000';
+}
+
+const stripeKey = process.env.STRIPE_PUBLISHABLE_KEY || '';
+const isProd = process.env.NODE_ENV === 'production' || isRender;
 
 const targetDir = path.join(__dirname, 'src', 'environments');
 if (!fs.existsSync(targetDir)) {
@@ -14,7 +25,8 @@ if (!fs.existsSync(targetDir)) {
 
 const envConfigFile = `export const environment = {
   production: ${isProd},
-  API_URL: '${apiUrl.replace(/\/$/, '')}'
+  API_URL: '${apiUrl.replace(/\/$/, '')}',
+  STRIPE_PUBLISHABLE_KEY: '${stripeKey}'
 };
 `;
 

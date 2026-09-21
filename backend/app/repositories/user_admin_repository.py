@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.bitacora import Bitacora
 from app.models.rol import Rol
 from app.models.usuario import Usuario
+from app.models.cliente import Cliente
 
 
 class UserAdminRepository:
@@ -21,6 +22,21 @@ class UserAdminRepository:
     def get_role_by_id(self, id_rol: int) -> Rol | None:
         return self.db.get(Rol, id_rol)
 
+    def get_role_by_name(self, name: str) -> Rol | None:
+        return self.db.scalar(select(Rol).where(Rol.nombre == name))
+
+    def create_user(self, user: Usuario) -> Usuario:
+        self.db.add(user)
+        self.db.flush()
+        self.db.refresh(user)
+        return user
+
+    def create_client(self, user_id: int) -> Cliente:
+        client = Cliente(id_usuario=user_id, estado="ACTIVO")
+        self.db.add(client)
+        self.db.flush()
+        return client
+
     def update_user_status(self, user: Usuario, estado: str) -> Usuario:
         user.estado = estado
         self.db.flush()
@@ -29,6 +45,13 @@ class UserAdminRepository:
 
     def update_user_role(self, user: Usuario, id_rol: int) -> Usuario:
         user.id_rol = id_rol
+        self.db.flush()
+        self.db.refresh(user)
+        return user
+
+    def update_user(self, user: Usuario, **values: object) -> Usuario:
+        for field, value in values.items():
+            setattr(user, field, value)
         self.db.flush()
         self.db.refresh(user)
         return user

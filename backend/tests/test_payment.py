@@ -57,7 +57,7 @@ def test_approve_payment_confirms_order(db) -> None:
 
     approved_payment = service.approve_payment(payment.id_pago)
 
-    assert approved_payment.estado == "APROBADO"
+    assert approved_payment.estado == "PAGADO"
     db.refresh(order)
     assert order.estado == "CONFIRMADO"
 
@@ -69,6 +69,19 @@ def test_reject_payment_updates_payment_state_only(db) -> None:
 
     rejected_payment = service.reject_payment(payment.id_pago)
 
-    assert rejected_payment.estado == "RECHAZADO"
+    assert rejected_payment.estado == "FALLIDO"
     db.refresh(order)
     assert order.estado == "PENDIENTE"
+
+
+def test_stripe_success_can_follow_a_failed_attempt(db) -> None:
+    order = create_order(db)
+    service = PaymentService(db)
+    payment = service.create_payment(CreatePaymentRequest(id_pedido=order.id_pedido, metodo_pago="TARJETA"))
+
+    service.reject_payment(payment.id_pago)
+    approved_payment = service.approve_payment(payment.id_pago, allow_retry_from_failed=True)
+
+    assert approved_payment.estado == "PAGADO"
+    db.refresh(order)
+    assert order.estado == "CONFIRMADO"

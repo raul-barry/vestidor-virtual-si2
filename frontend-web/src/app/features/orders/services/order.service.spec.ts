@@ -18,10 +18,10 @@ describe('OrderService', () => {
   afterEach(() => http.verify());
 
   it('creates an order from the active cart', () => {
-    service.createOrder().subscribe();
+    service.createOrder({ tipo_entrega: 'RECOJO_SUCURSAL', id_sucursal_entrega: 1 }).subscribe();
     const request = http.expectOne('http://localhost:8000/api/orders');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({});
+    expect(request.request.body).toEqual({ tipo_entrega: 'RECOJO_SUCURSAL', id_sucursal_entrega: 1 });
     request.flush({ id_pedido: 1, estado: 'PENDIENTE', total: '500.00' });
   });
 

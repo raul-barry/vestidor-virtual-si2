@@ -7,11 +7,13 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Order } from '../../../../shared/models/order.model';
 import { OrderService } from '../../services/order.service';
+import { BackLinkComponent } from '../../../../shared/components/back-link.component';
+import { OrderStatusTrackerComponent } from '../../components/order-status-tracker.component';
 
 @Component({
   selector: 'app-order-detail',
   standalone: true,
-  imports: [CurrencyPipe, DatePipe, MatButtonModule, MatCardModule, MatProgressSpinnerModule, MatSnackBarModule],
+  imports: [CurrencyPipe, DatePipe, MatButtonModule, MatCardModule, MatProgressSpinnerModule, MatSnackBarModule, BackLinkComponent, OrderStatusTrackerComponent],
   templateUrl: './order-detail.component.html',
   styleUrl: './order-detail.component.scss'
 })

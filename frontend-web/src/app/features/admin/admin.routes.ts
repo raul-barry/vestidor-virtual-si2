@@ -8,6 +8,15 @@ export const ADMIN_ROUTES: Routes = [
     component: AdminLayoutComponent,
     canActivateChild: [adminGuard],
     children: [
+      { path: 'security', data: {mode: 'security'}, loadComponent: () => import('../experience/experience.component').then(c => c.ExperienceComponent) },
+      ...['cities', 'promotions', 'returns'].map(mode => ({ path: mode, data: {mode}, loadComponent: () => import('../commerce/commerce.component').then(c => c.CommerceComponent) })),
+      { path: 'audit', loadComponent: () => import('./pages/audit/audit.component').then(c => c.AuditComponent) },
+      { path: 'suppliers', loadComponent: () => import('./pages/suppliers/supplier-list.component').then(c => c.SupplierListComponent) },
+      { path: 'collections', loadComponent: () => import('./pages/collections/collection-list.component').then(c => c.CollectionListComponent) },
+      { path: 'categories', loadComponent: () => import('./pages/categories/category-list.component').then(c => c.CategoryListComponent) },
+      { path: 'sizes', loadComponent: () => import('./pages/sizes/size-list.component').then(c => c.SizeListComponent) },
+      { path: 'colors', loadComponent: () => import('./pages/colors/color-list.component').then(c => c.ColorListComponent) },
+      { path: 'branches', loadComponent: () => import('./pages/branches/branch-list.component').then(c => c.BranchListComponent) },
       {
         path: 'dashboard',
         loadComponent: () => import('./pages/dashboard/dashboard.component').then(
@@ -22,8 +31,10 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'orders', pathMatch: 'full', loadComponent: () => import('./pages/orders/order-list/order-list.component').then(c => c.OrderListComponent) },
       { path: 'orders/detail/:id', loadComponent: () => import('./pages/orders/order-detail/order-detail.component').then(c => c.OrderDetailComponent) },
       { path: 'users', pathMatch: 'full', loadComponent: () => import('./pages/users/user-list/user-list.component').then(c => c.UserListComponent) },
+      { path: 'roles', loadComponent: () => import('./pages/roles/role-list.component').then(c => c.RoleListComponent) },
       { path: 'users/detail/:id', loadComponent: () => import('./pages/users/user-detail/user-detail.component').then(c => c.UserDetailComponent) },
       { path: 'reports', loadComponent: () => import('./pages/reports/reports.component').then(c => c.ReportsComponent) },
+      { path: 'sales-history', loadComponent: () => import('./pages/sales-history/sales-history.component').then(c => c.SalesHistoryComponent) },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]
   }

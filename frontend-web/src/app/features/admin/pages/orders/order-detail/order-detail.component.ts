@@ -8,11 +8,12 @@ import { OrderAdminService } from '../../../services/order-admin.service';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ErrorMessageComponent } from '../../../shared/components/error-message/error-message.component';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { BackLinkComponent } from '../../../../../shared/components/back-link.component';
 
 @Component({
   selector: 'app-order-detail-admin', standalone: true,
-  imports: [CurrencyPipe, MatCardModule, MatSnackBarModule, LoadingSpinnerComponent, EmptyStateComponent, ErrorMessageComponent],
-  template: `<section class="page">
+  imports: [CurrencyPipe, MatCardModule, MatSnackBarModule, LoadingSpinnerComponent, EmptyStateComponent, ErrorMessageComponent, BackLinkComponent],
+  template: `<section class="page"><app-back-link [to]="['/admin/orders']" label="Volver a ventas" />
     @if (loading) { <app-loading-spinner /> }
     @else if (error) { <app-error-message message="Pedido inexistente o no disponible." /> }
     @else if (order) {

@@ -12,7 +12,7 @@ services:
     rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && python -m app.database.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python start.py
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -25,6 +25,8 @@ services:
         value: "*"
       - key: PYTHON_VERSION
         value: 3.12.2
+      - key: PYTHONUNBUFFERED
+        value: "1"
 
   # 2. Frontend Web (Angular 17 Static Site)
   - type: web
@@ -39,7 +41,4 @@ services:
         destination: /index.html
     envVars:
       - key: API_URL
-        fromService:
-          type: web
-          name: vestidor-virtual-backend
-          property: host
+        value: https://vestidor-virtual-backend.onrender.com

@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from conftest import session_token
 from app.main import app
 from app.models.bitacora import Bitacora
 from app.models.categoria import Categoria
@@ -40,7 +40,7 @@ def create_headers(db, role_name: str, correo: str) -> tuple[dict[str, str], Usu
     )
     db.add(user)
     db.commit()
-    token = create_access_token({"id_usuario": user.id_usuario, "rol": role.nombre})
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role.nombre})
     return {"Authorization": f"Bearer {token}"}, user
 
 
@@ -65,7 +65,7 @@ def create_report_data(db, admin: Usuario) -> None:
     inventory = Inventario(sucursal=branch, variante=variant, stock_disponible=3, stock_reservado=0)
     order = Pedido(cliente=client, estado="CONFIRMADO", total=Decimal("500"))
     detail = PedidoDetalle(pedido=order, variante=variant, cantidad=2, precio_unitario=Decimal("250"))
-    payment = Pago(pedido=order, metodo_pago="QR", monto=Decimal("500"), estado="APROBADO")
+    payment = Pago(pedido=order, metodo_pago="QR", monto=Decimal("500"), estado="PAGADO")
     movement = MovimientoInventario(
         inventario=inventory,
         tipo_movimiento="ENTRADA",

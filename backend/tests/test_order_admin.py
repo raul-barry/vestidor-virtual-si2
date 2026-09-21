@@ -3,7 +3,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from conftest import session_token
 from app.main import app
 from app.models.bitacora import Bitacora
 from app.models.categoria import Categoria
@@ -34,7 +34,7 @@ def create_headers(db, role_name: str, correo: str) -> tuple[dict[str, str], Usu
     )
     db.add(user)
     db.commit()
-    token = create_access_token({"id_usuario": user.id_usuario, "rol": role.nombre})
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role.nombre})
     return {"Authorization": f"Bearer {token}"}, user
 
 
@@ -80,24 +80,24 @@ def test_admin_can_list_and_filter_orders(db) -> None:
 
 def test_admin_can_view_detail_and_change_status_with_audit(db) -> None:
     headers, admin = create_headers(db, "ADMINISTRADOR", "admin@example.com")
-    order = create_order(db)
+    order = create_order(db, "CONFIRMADO")
     client = TestClient(app)
 
     detail = client.get(f"/api/admin/orders/{order.id_pedido}", headers=headers)
     updated = client.put(
         f"/api/admin/orders/{order.id_pedido}/status",
         headers=headers,
-        json={"estado": "CONFIRMADO"},
+        json={"estado": "PREPARANDO"},
     )
 
     assert detail.status_code == 200
     assert detail.json()["cliente"] == "Carlos Perez"
     assert detail.json()["detalles"][0]["producto"] == "Camisa Oxford"
     assert updated.status_code == 200
-    assert updated.json()["estado"] == "CONFIRMADO"
+    assert updated.json()["estado"] == "PREPARANDO"
     audit = db.scalar(select(Bitacora).where(Bitacora.id_usuario == admin.id_usuario))
     assert audit is not None
-    assert audit.accion == f"Pedido {order.id_pedido}: estado PENDIENTE -> CONFIRMADO"
+    assert audit.accion == f"Pedido {order.id_pedido}: estado CONFIRMADO -> PREPARANDO"
 
 
 def test_admin_cannot_apply_invalid_transition_or_access_missing_order(db) -> None:

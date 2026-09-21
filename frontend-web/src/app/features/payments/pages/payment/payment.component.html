@@ -2,19 +2,33 @@
   @if (isLoading) {
     <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pago...</span></div>
   } @else if (order) {
-    <header class="payment-header"><p>PEDIDO #{{ order.id_pedido }}</p><h1>Pago</h1></header>
-
+    <header class="payment-header"><p>PEDIDO #{{ order.id_pedido }}</p><h1>Pago seguro</h1><span>Los datos de tarjeta nunca se almacenan.</span>@if (cardSimulation || qrSimulation) { <strong class="demo-badge">MODO DEMOSTRACIÓN</strong> }</header>
     <section class="payment-layout">
       <mat-card class="order-card"><mat-card-content><span>Total del pedido</span><strong>{{ order.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong><span>Estado: {{ order.estado }}</span></mat-card-content></mat-card>
-
-      @if (payment) {
-        <mat-card class="payment-result"><mat-card-content><p>Pago registrado #{{ payment.id_pago }}</p><h2>{{ payment.metodo_pago }}</h2><span>Estado: {{ payment.estado }}</span><strong>{{ payment.monto | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong></mat-card-content></mat-card>
+      @if (successPayment) {
+        <mat-card class="payment-success"><mat-card-content><h2>Pago realizado correctamente</h2><p>Pedido #{{ successPayment.id_pedido }}</p><p>Método: {{ successPayment.metodo_pago }}</p><p>Monto: {{ successPayment.monto | currency:'BOB':'symbol-narrow':'1.2-2' }}</p><strong>Estado: PAGADO</strong><button mat-flat-button color="primary" [routerLink]="['/orders/detail', successPayment.id_pedido]">Ver mi pedido</button></mat-card-content></mat-card>
+      } @else if (payment) {
+        <mat-card class="payment-result"><mat-card-content>
+          <p>Pago #{{ payment.id_pago }} · {{ payment.metodo_pago }}</p><h2>{{ payment.estado }}</h2><strong>{{ payment.monto | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+          @if (payment.estado === 'PENDIENTE' && payment.metodo_pago === 'TARJETA') { <button mat-flat-button color="primary" (click)="startCardPayment()" [disabled]="isSubmitting">Continuar pago con tarjeta</button> }
+          @if (payment.estado === 'PENDIENTE' && payment.metodo_pago === 'QR' && qrSimulation) { <button mat-flat-button color="primary" (click)="confirmQrPayment()" [disabled]="isSubmitting">Simular pago realizado</button> }
+          @if (payment.estado === 'PENDIENTE' && payment.metodo_pago === 'EFECTIVO') { <p>Pago en efectivo registrado como PENDIENTE. Se confirmará al entregar o recoger el pedido.</p> }
+        </mat-card-content></mat-card>
       } @else {
-        <mat-card><mat-card-header><mat-card-title>Selecciona un método</mat-card-title></mat-card-header><mat-card-content>
-          <form [formGroup]="paymentForm" (ngSubmit)="createPayment()">
-            <mat-form-field appearance="outline"><mat-label>Método de pago</mat-label><mat-select formControlName="metodo_pago"><mat-option value="QR">QR</mat-option><mat-option value="EFECTIVO">Efectivo</mat-option><mat-option value="TARJETA">Tarjeta</mat-option></mat-select></mat-form-field>
-            <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">{{ isSubmitting ? 'Creando pago...' : 'Confirmar pago' }}</button>
-          </form>
+        <mat-card><mat-card-header><mat-card-title>Selecciona un método</mat-card-title></mat-card-header><mat-card-content><form [formGroup]="paymentForm" (ngSubmit)="createPayment()">
+          <mat-form-field appearance="outline"><mat-label>Método de pago</mat-label><mat-select formControlName="metodo_pago"><mat-option value="TARJETA">Tarjeta (Stripe)</mat-option><mat-option value="QR">QR</mat-option><mat-option value="EFECTIVO">Efectivo</mat-option></mat-select></mat-form-field>
+          @if (selectedMethod === 'QR') { <p>Se generará un QR genérico para la demostración.</p> } @if (selectedMethod === 'EFECTIVO') { <p>Podrás confirmar la recepción del efectivo en el siguiente paso.</p> }
+          <button mat-flat-button color="primary" type="submit" [disabled]="isSubmitting">{{ selectedMethod === 'TARJETA' ? 'Continuar con Stripe' : 'Confirmar método' }}</button>
+        </form></mat-card-content></mat-card>
+      }
+      @if (payment?.estado === 'PENDIENTE' && payment?.metodo_pago === 'QR' && qrPayload) {
+        <mat-card class="qr-card"><mat-card-content><h2>Escanea el QR para realizar el pago.</h2><div class="qr-code" aria-label="Código QR de demostración">@for (cell of qrCells; track cell) { <i [class.dark]="qrCellIsDark(cell)"></i> }</div><small>{{ qrPayload }}</small></mat-card-content></mat-card>
+      }
+      @if (cardClientSecret && payment?.estado === 'PENDIENTE' && payment?.metodo_pago === 'TARJETA') {
+        <mat-card><mat-card-content>
+          @if (cardSimulation) {
+            <h2>Tarjeta de prueba</h2><p>Modo demostración: estos datos solo se usan en memoria.</p><form [formGroup]="demoCardForm" class="demo-card-form"><mat-form-field appearance="outline"><mat-label>Número de tarjeta</mat-label><input matInput formControlName="number" inputmode="numeric"></mat-form-field><mat-form-field appearance="outline"><mat-label>Vencimiento</mat-label><input matInput formControlName="expiry" placeholder="MM/AA"></mat-form-field><mat-form-field appearance="outline"><mat-label>CVV</mat-label><input matInput formControlName="cvc" inputmode="numeric"></mat-form-field><mat-form-field appearance="outline"><mat-label>Titular</mat-label><input matInput formControlName="holder"></mat-form-field></form><button mat-flat-button color="primary" (click)="confirmCardPayment()" [disabled]="demoCardForm.invalid || isSubmitting">Simular pago realizado</button>
+          } @else { <div #paymentElement class="stripe-element"></div><button mat-flat-button color="primary" (click)="confirmCardPayment()" [disabled]="!cardReady || isSubmitting">Confirmar pago con Stripe</button> }
         </mat-card-content></mat-card>
       }
     </section>

@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CreateVariantRequest(BaseModel):
+    id_producto: int | None = None
     sku: str = Field(min_length=1, max_length=100)
     id_talla: int
     id_color: int

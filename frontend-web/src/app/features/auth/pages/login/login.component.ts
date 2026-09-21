@@ -1,6 +1,7 @@
+import { homeForRole } from '../../../../shared/navigation/navigation.config';
 import { Component, inject } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -18,7 +19,8 @@ import { AuthService } from '../../services/auth.service';
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    RouterLink
   ],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss'
@@ -49,17 +51,8 @@ export class LoginComponent {
       next: (response) => {
         this.snackBar.open('Sesión iniciada correctamente', 'Cerrar', { duration: 3000 });
         const rol = (response.rol ?? this.authService.getRoleFromToken(response.access_token))?.trim().toUpperCase();
-        const ruta = rol === 'ADMINISTRADOR' ? '/admin' : '/catalog';
-        console.log('LOGIN RESPONSE', response);
-        console.log('ROL LOGIN', rol);
-        console.log('REDIRECCIÓN FINAL', ruta);
-        console.log('ENTRANDO LOGIN COMPONENT');
-        if (rol === 'ADMINISTRADOR') {
-          void this.router.navigate(['/admin']);
-          console.log('NAVEGANDO ADMIN');
-          return;
-        }
-        void this.router.navigate(['/catalog']);
+
+        void this.router.navigate([homeForRole(rol ?? '')]);
       },
       error: (error: { error?: { message?: string } }) => {
         this.snackBar.open(error.error?.message ?? 'No fue posible iniciar sesión', 'Cerrar', {

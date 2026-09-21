@@ -18,6 +18,7 @@ export interface Producto {
   estado: string;
   categoria: Categoria;
   variantes: ProductoVariante[];
+  imagen_url?: string | null;
 }
 
 export interface ProductVariantsResponse {

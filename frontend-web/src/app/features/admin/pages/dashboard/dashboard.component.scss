@@ -1,11 +1,15 @@
 :host { display: block; min-height: 100%; }
-.dashboard-page { background: #f8fafc; min-height: 100vh; padding: 2rem; }
+.dashboard-page { background: var(--canvas); min-height: 100vh; padding: 2rem; }
 header, section { margin: 0 auto; max-width: 80rem; }
-header { margin-bottom: 2rem; }
-header p { color: #4f46e5; font-size: .75rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .5rem; }
-h1 { color: #172554; font-size: clamp(2rem, 4vw, 3rem); margin: 0; }
+header { margin-bottom: 2rem; padding: clamp(24px,4vw,46px); border-radius: 20px; background: linear-gradient(120deg,#123b30,#28614e); }
+header p { color: #b8dfc2; font-size: .75rem; font-weight: 700; letter-spacing: .14em; margin: 0 0 .5rem; }
+h1 { color: #fff; font: 400 clamp(2rem,4vw,3.3rem)/1.1 Georgia,serif; margin: 0; }
 mat-card-content { display: grid; gap: .75rem; padding: 1.25rem; }
-span { color: #64748b; font-size: .9rem; }
-strong { color: #0f766e; font-size: 2rem; }
-.charts-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); margin: 1.5rem auto 0; max-width: 80rem; }
+span { color: var(--muted); font-size: .9rem; }
+strong { color: var(--primary); font-size: 2rem; }
+.grid mat-card { position:relative; overflow:hidden; }
+.grid mat-card::after { content:''; position:absolute; inset:auto 0 0; height:3px; background:linear-gradient(90deg,var(--primary),#b6c891); }
+.charts-grid mat-card { overflow:hidden; }
+.charts-grid mat-card-header { padding:20px 20px 0; }
+.charts-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); margin: 1.5rem auto 0; max-width: 80rem; }
 .loading-state, .empty-state { align-items: center; display: flex; gap: 1rem; justify-content: center; margin: 4rem auto; max-width: 30rem; padding: 2rem; text-align: center; }

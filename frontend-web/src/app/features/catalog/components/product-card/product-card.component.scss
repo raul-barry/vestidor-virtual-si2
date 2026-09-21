@@ -5,9 +5,19 @@
 }
 
 .product-image {
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: #e9eee9;
 }
+
+.product-image img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12); transition: transform 350ms ease; }
+.product-image-shirt img { object-position: 50% 14%; }
+.product-image-pants img { object-position: 50% 52%; }
+.product-image-jacket img { object-position: 50% 86%; }
+.product-tag,.quick-view { position: absolute; left: 12px; border-radius: 999px; padding: 6px 9px; font-size: 9px; font-weight: 700; letter-spacing: .09em; }
+.product-tag { top: 12px; background: #f9f8f4; color: var(--ink); }
+.quick-view { bottom: 12px; background: #153f33; color: #fff; transform: translateY(8px); opacity: 0; transition: .22s ease; }
 
 mat-card-content {
   display: grid;
@@ -16,7 +26,7 @@ mat-card-content {
 }
 
 .category {
-  color: #4f46e5;
+  color: var(--primary);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -25,31 +35,36 @@ mat-card-content {
 }
 
 h2 {
-  color: #172554;
+  color: var(--ink);
   font-size: 1.2rem;
   margin: 0;
 }
 
 .description {
-  color: #64748b;
+  color: var(--muted);
   margin: 0;
   min-height: 2.5rem;
 }
 
 .product-footer {
   align-items: center;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   padding-top: 0.75rem;
 }
 
 .product-footer strong {
-  color: #0f766e;
+  color: var(--primary);
   font-size: 1.1rem;
 }
 
 .product-footer span {
-  color: #64748b;
+  color: var(--muted);
   font-size: 0.85rem;
 }
+
+.product-card { transition: transform 180ms ease, box-shadow 180ms ease; }
+.product-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.product-card:hover .product-image img { transform: scale(1.18); }
+.product-card:hover .quick-view { transform: translateY(0); opacity: 1; }

@@ -68,8 +68,8 @@ def test_logout_rejects_user_without_active_session(db) -> None:
 
     response = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
 
-    assert response.status_code == 404
-    assert response.json()["message"] == "Sesión no encontrada"
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Sesión inválida o revocada"
 
 
 def test_logout_endpoint_is_documented_with_bearer_auth() -> None:

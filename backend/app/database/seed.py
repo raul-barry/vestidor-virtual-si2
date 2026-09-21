@@ -1,5 +1,7 @@
 from collections.abc import Iterable
 from decimal import Decimal
+from datetime import date, timedelta
+from app.models.comercio import Ciudad, Proveedor, Coleccion, Promocion
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,6 +14,7 @@ from app.models.categoria import Categoria
 from app.models.cliente import Cliente
 from app.models.color import Color
 from app.models.inventario import Inventario
+from app.models.recurso_virtual import RecursoVirtual
 from app.models.producto import Producto
 from app.models.producto_variante import ProductoVariante
 from app.models.rol import Rol
@@ -19,10 +22,12 @@ from app.models.sucursal import Sucursal
 from app.models.talla import Talla
 from app.models.usuario import Usuario
 
-INITIAL_ROLES = ("ADMINISTRADOR", "CLIENTE")
+INITIAL_ROLES = ("ADMINISTRADOR", "CLIENTE", "ENCARGADO_SUCURSAL", "CAJERO")
 INITIAL_PASSWORDS = {
     "admin@vestidor.local": "Admin123!",
     "cliente@vestidor.local": "Cliente123!",
+    "encargado@vestidor.local": "Encargado123!",
+    "cajero@vestidor.local": "Cajero123!",
 }
 INITIAL_CATEGORIES = (
     ("Camisas", "Camisas masculinas para uso casual y formal."),
@@ -102,6 +107,36 @@ def _seed_users(db: Session) -> int:
     elif client.cliente is None:
         db.add(Cliente(id_usuario=client.id_usuario, estado="ACTIVO"))
 
+    encargado = db.scalar(select(Usuario).where(Usuario.correo == "encargado@vestidor.local"))
+    if encargado is None and "ENCARGADO_SUCURSAL" in roles:
+        db.add(
+            Usuario(
+                id_rol=roles["ENCARGADO_SUCURSAL"].id_rol,
+                nombres="Encargado",
+                apellidos="Sucursal",
+                correo="encargado@vestidor.local",
+                telefono=None,
+                password_hash=hash_password(INITIAL_PASSWORDS["encargado@vestidor.local"]),
+                estado="ACTIVO",
+            )
+        )
+        created += 1
+
+    cajero = db.scalar(select(Usuario).where(Usuario.correo == "cajero@vestidor.local"))
+    if cajero is None and "CAJERO" in roles:
+        db.add(
+            Usuario(
+                id_rol=roles["CAJERO"].id_rol,
+                nombres="Cajero",
+                apellidos="Principal",
+                correo="cajero@vestidor.local",
+                telefono=None,
+                password_hash=hash_password(INITIAL_PASSWORDS["cajero@vestidor.local"]),
+                estado="ACTIVO",
+            )
+        )
+        created += 1
+
     db.flush()
     return created
 
@@ -115,6 +150,7 @@ def _seed_catalog(db: Session) -> dict[str, int]:
         "productos": 0,
         "variantes": 0,
         "inventarios": 0,
+        "recursos_virtuales": 0,
     }
 
     categories: dict[str, Categoria] = {}
@@ -158,6 +194,26 @@ def _seed_catalog(db: Session) -> dict[str, int]:
             db.flush()
             created["productos"] += 1
 
+        # Realistic raster catalog photo; keep the dedicated try-on resource below separate.
+        asset_url = f"/api/assets/catalog/catalog-prenda-{product_index}.png"
+        resource = db.scalar(select(RecursoVirtual).where(
+            RecursoVirtual.id_producto == product.id_producto, RecursoVirtual.url_archivo == asset_url))
+        if resource is None:
+            db.add(RecursoVirtual(id_producto=product.id_producto, tipo_recurso="imagen",
+                                  url_archivo=asset_url, estado="ACTIVO"))
+            created["recursos_virtuales"] += 1
+
+        # The try-on pipeline receives a separate raster cutout with its own framing.
+        tryon_url = f"/api/assets/tryon/prenda-{product_index}.png"
+        tryon_resource = db.scalar(select(RecursoVirtual).where(
+            RecursoVirtual.id_producto == product.id_producto,
+            RecursoVirtual.url_archivo == tryon_url,
+        ))
+        if tryon_resource is None:
+            db.add(RecursoVirtual(id_producto=product.id_producto, tipo_recurso="tryon",
+                                  url_archivo=tryon_url, estado="ACTIVO"))
+            created["recursos_virtuales"] += 1
+
         for size_name in INITIAL_SIZES:
             sku = f"VV-{product_index:03d}-{size_name}-{color_name[:3].upper()}"
             variant = db.scalar(select(ProductoVariante).where(ProductoVariante.sku == sku))
@@ -198,13 +254,45 @@ def seed_initial_data(db: Session) -> dict[str, int]:
     created = {"roles": seed_roles(db)}
     created["usuarios"] = _seed_users(db)
     created.update(_seed_catalog(db))
+    created["ciudades"] = 0
+    for city_name in db.scalars(select(Sucursal.ciudad).distinct()).all():
+        _, added = _get_or_create_named(db, Ciudad, city_name)
+        created["ciudades"] += int(added)
+    branch = db.scalar(select(Sucursal).where(Sucursal.nombre == INITIAL_BRANCH[0]))
+    for email in ("encargado@vestidor.local", "cajero@vestidor.local"):
+        staff = db.scalar(select(Usuario).where(Usuario.correo == email))
+        if staff and staff.id_sucursal is None:
+            staff.id_sucursal = branch.id_sucursal
+    supplier, added = _get_or_create_named(db, Proveedor, "Textiles Bolivia", contacto="contacto@textiles.example")
+    created["proveedores"] = int(added)
+    collection, added = _get_or_create_named(db, Coleccion, "Colección esencial", descripcion="Prendas para uso diario")
+    created["colecciones"] = int(added)
+    for product in db.scalars(select(Producto).where(Producto.nombre.in_([p[0] for p in INITIAL_PRODUCTS]))).all():
+        if product.id_proveedor is None:
+            product.id_proveedor = supplier.id_proveedor
+        if product.id_coleccion is None:
+            product.id_coleccion = collection.id_coleccion
+    promotion = db.scalar(select(Promocion).where(Promocion.nombre == "Bienvenida"))
+    created["promociones"] = int(promotion is None)
+    if promotion is None:
+        product = db.scalar(select(Producto).where(Producto.nombre == INITIAL_PRODUCTS[0][0]))
+        db.add(Promocion(nombre="Bienvenida", id_producto=product.id_producto, descuento=Decimal("10"),
+                        inicio=date.today(), fin=date.today() + timedelta(days=90)))
+    db.flush()
     return created
 
 
 def main() -> None:
+    import argparse
+    from app.core.config import settings
+    parser = argparse.ArgumentParser(description="Initialize roles or development demo data")
+    parser.add_argument("--roles-only", action="store_true")
+    args = parser.parse_args()
+    if settings.environment == "production" and not args.roles_only:
+        parser.error("Demo data is disabled in production; use --roles-only")
     db = SessionLocal()
     try:
-        created = seed_initial_data(db)
+        created = {"roles": seed_roles(db)} if args.roles_only else seed_initial_data(db)
         db.commit()
         print(f"Seed completado: {created}")
     except SQLAlchemyError:

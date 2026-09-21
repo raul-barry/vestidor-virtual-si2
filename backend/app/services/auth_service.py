@@ -1,8 +1,11 @@
 import secrets
+import smtplib
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.core.exceptions import AppException
 from app.core.config import settings
@@ -97,8 +100,10 @@ class AuthService:
             self.repository.db.rollback()
             raise AppException("No se pudo iniciar sesión", status_code=500) from exc
 
-    def logout_user(self, usuario: Usuario) -> None:
-        sesion = self.repository.get_active_session_by_user(usuario.id_usuario)
+    def logout_user(self, usuario: Usuario, token: str | None = None) -> None:
+        sesion = self.repository.db.scalar(select(Sesion).where(
+            Sesion.id_usuario == usuario.id_usuario, Sesion.token_jwt == token,
+            Sesion.estado == "ACTIVA")) if token else self.repository.get_active_session_by_user(usuario.id_usuario)
         if sesion is None:
             raise AppException("Sesión no encontrada", status_code=404)
 
@@ -140,11 +145,48 @@ class AuthService:
                     fecha_hora=now,
                 )
             )
+            if settings.smtp_configured:
+                self._send_password_reset_email(usuario.correo, token_value)
+            elif not (settings.environment in ("development", "test") and settings.expose_reset_token):
+                raise AppException(
+                    "No hay un canal de entrega configurado para el token de recuperación",
+                    status_code=503,
+                )
             self.repository.db.commit()
             return token_value
+        except AppException:
+            self.repository.db.rollback()
+            raise
         except SQLAlchemyError as exc:
             self.repository.db.rollback()
             raise AppException("No se pudo generar la solicitud de recuperación", status_code=500) from exc
+
+    @staticmethod
+    def _send_password_reset_email(recipient: str, token: str) -> None:
+        message = EmailMessage()
+        message["Subject"] = "Recuperación de acceso · Fashion Store"
+        message["From"] = settings.smtp_from
+        message["To"] = recipient
+        message.set_content(
+            "Solicitaste restablecer tu contraseña de Fashion Store.\n\n"
+            f"Token de recuperación: {token}\n\n"
+            f"Este token expira en {settings.password_reset_token_expire_minutes} minutos y solo puede utilizarse una vez."
+        )
+        try:
+            if settings.smtp_ssl:
+                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15) as client:
+                    if settings.smtp_username:
+                        client.login(settings.smtp_username, settings.smtp_password)
+                    client.send_message(message)
+                return
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as client:
+                if settings.smtp_starttls:
+                    client.starttls()
+                if settings.smtp_username:
+                    client.login(settings.smtp_username, settings.smtp_password)
+                client.send_message(message)
+        except (OSError, smtplib.SMTPException) as exc:
+            raise AppException("No se pudo enviar el correo de recuperación", status_code=503) from exc
 
     def reset_password(self, request: PasswordResetConfirm) -> None:
         now = datetime.now(timezone.utc)
@@ -155,6 +197,10 @@ class AuthService:
         try:
             self.repository.update_password(recovery_token.usuario, hash_password(request.nueva_password))
             self.repository.mark_token_used(recovery_token)
+            for session in self.repository.db.scalars(select(Sesion).where(Sesion.id_usuario == recovery_token.id_usuario)).all():
+                session.estado = "INACTIVA"
+            for other in self.repository.db.scalars(select(TokenRecuperacion).where(TokenRecuperacion.id_usuario == recovery_token.id_usuario)).all():
+                other.usado = True
             self.repository.create_bitacora(
                 Bitacora(
                     id_usuario=recovery_token.id_usuario,
@@ -166,6 +212,10 @@ class AuthService:
         except SQLAlchemyError as exc:
             self.repository.db.rollback()
             raise AppException("No se pudo actualizar la contraseña", status_code=500) from exc
+
+    def validate_password_reset_token(self, token: str) -> None:
+        if self.repository.get_valid_recovery_token(token, datetime.now(timezone.utc)) is None:
+            raise AppException("Token de recuperación inválido o expirado", status_code=400)
 
     def verify_user_password(self, usuario: Usuario, password: str) -> bool:
         return verify_password(password, usuario.password_hash)

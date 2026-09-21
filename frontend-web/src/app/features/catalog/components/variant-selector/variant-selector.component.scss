@@ -9,12 +9,12 @@
 }
 
 h3 {
-  color: #334155;
+  color: var(--ink);
   font-size: 0.9rem;
   margin: 0;
 }
 
 .empty-message {
-  color: #64748b;
+  color: var(--muted);
   margin: 0;
 }

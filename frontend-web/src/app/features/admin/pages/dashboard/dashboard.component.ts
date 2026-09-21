@@ -28,7 +28,6 @@ export class DashboardComponent implements OnInit {
   hasError = false;
 
   ngOnInit(): void {
-    console.log('ADMIN CARGADO');
     forkJoin({
       dashboard: this.reportService.getDashboard(),
       sales: this.reportService.getSales(),

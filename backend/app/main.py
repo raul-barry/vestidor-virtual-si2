@@ -27,3 +27,7 @@ else:
     )
 app.add_exception_handler(AppException, app_exception_handler)
 app.include_router(api_router)
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+app.mount("/api/assets", StaticFiles(directory=Path(__file__).parent / "assets"), name="assets")

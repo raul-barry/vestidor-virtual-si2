@@ -1,4 +1,5 @@
 <main class="detail-page">
+  <app-back-link [to]="['/catalog']" label="Volver al catálogo" />
   @if (isLoading) {
     <div class="loading-state">
       <mat-spinner diameter="42"></mat-spinner>
@@ -11,17 +12,30 @@
     </header>
 
     <section class="detail-grid">
-      <mat-card>
+      <section class="detail-visual" aria-label="Galería de producto">
+        <div class="gallery-main"><img [src]="imageUrl" [alt]="variants.nombre_producto" (error)="useFallbackImage($event)" /></div>
+        <div class="gallery-notes"><span>FASHION STORE · VESTIDOR 3D</span><span>Disponibilidad en tiempo real</span></div>
+      </section>
+      <mat-card class="purchase-card">
         <mat-card-header><mat-card-title>Tallas y colores</mat-card-title></mat-card-header>
         <mat-card-content>
-          <app-variant-selector [product]="variants" (selectedVariantChange)="selectedVariant = $event" />
-          <button mat-flat-button color="primary" type="button" [disabled]="isAddingToCart" (click)="addToCart()">
+          <p class="product-kicker">SELECCIÓN ESENCIAL</p>
+          <h2>{{ variants.nombre_producto }}</h2>
+          @if(price){<strong class="product-price">Bs {{price}}</strong>}
+          <p class="product-description">{{description || 'Selecciona tu variante para comprobar disponibilidad y visualizar la prenda en el vestidor virtual.'}}</p>
+          <app-variant-selector [product]="variants" (selectedVariantChange)="selectVariant($event)" />
+          <a class="fitting-cta" mat-flat-button color="primary" routerLink="/experience/fitting" [queryParams]="{producto_id: productId, variante_id: selectedVariant?.id_variante}">✦ Probar en vestidor virtual 3D</a>
+          <button class="cart-cta" mat-stroked-button type="button" [disabled]="isAddingToCart" (click)="addToCart()">
             {{ isAddingToCart ? 'Agregando...' : 'Agregar al carrito' }}
           </button>
+          <button class="reserve-cta" mat-stroked-button type="button" (click)="reserveSelectedVariant()">
+            Reservar prenda
+          </button>
+          @if (hasSession()) {<button mat-button type="button" (click)="recordPreference('favorita')">Marcar categoría favorita</button>}
         </mat-card-content>
       </mat-card>
 
-      <mat-card>
+      <mat-card class="availability-card">
         <mat-card-header><mat-card-title>Disponibilidad por sucursal</mat-card-title></mat-card-header>
         <mat-card-content><app-availability-list [availability]="availability.disponibilidad" /></mat-card-content>
       </mat-card>

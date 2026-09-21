@@ -1,3 +1,6 @@
+import { RouterTestingModule } from '@angular/router/testing';
+import { ApiService } from '../../../../core/services/api.service';
+import { AuthService } from '../../../auth/services/auth.service';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -17,14 +20,17 @@ describe('ProductDetailComponent', () => {
   beforeEach(async () => {
     catalogService = jasmine.createSpyObj<CatalogService>('CatalogService', [
       'getProductVariants',
-      'getProductAvailability'
+      'getProductAvailability',
+      'getProducts'
     ]);
     cartService = jasmine.createSpyObj<CartService>('CartService', ['addItem']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
     TestBed.configureTestingModule({
-      imports: [ProductDetailComponent, NoopAnimationsModule],
+      imports: [ProductDetailComponent, NoopAnimationsModule, RouterTestingModule],
       providers: [
+        { provide: ApiService, useValue: { post: () => of({}) } },
+        { provide: AuthService, useValue: { hasSession: () => false } },
         { provide: CatalogService, useValue: catalogService },
         { provide: CartService, useValue: cartService },
         { provide: MatSnackBar, useValue: snackBar },
@@ -50,6 +56,7 @@ describe('ProductDetailComponent', () => {
       nombre_producto: 'Camisa Oxford',
       disponibilidad: []
     }));
+    catalogService.getProducts.and.returnValue(of([{ id_producto: 1, nombre: 'Camisa Oxford', descripcion: 'Algodón premium', precio_base: '189.90', estado: 'ACTIVO', categoria: {id_categoria: 1, nombre: 'Camisas'}, variantes: [] }]));
     fixture = TestBed.createComponent(ProductDetailComponent);
     component = fixture.componentInstance;
 
@@ -58,6 +65,7 @@ describe('ProductDetailComponent', () => {
     expect(catalogService.getProductVariants).toHaveBeenCalledWith(1);
     expect(catalogService.getProductAvailability).toHaveBeenCalledWith(1);
     expect(component.variants?.nombre_producto).toBe('Camisa Oxford');
+    expect(component.price).toBe('189.90');
   });
 
   it('shows an error when a detail request fails', () => {
@@ -67,6 +75,7 @@ describe('ProductDetailComponent', () => {
       nombre_producto: 'Camisa Oxford',
       disponibilidad: []
     }));
+    catalogService.getProducts.and.returnValue(of([]));
     fixture = TestBed.createComponent(ProductDetailComponent);
     component = fixture.componentInstance;
 

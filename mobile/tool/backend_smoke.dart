@@ -1,0 +1,60 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vestidor_virtual_mobile/services/api_client.dart';
+import 'package:vestidor_virtual_mobile/services/client_repository.dart';
+import 'package:vestidor_virtual_mobile/services/client_session.dart';
+import '../test/support.dart';
+
+void main() {
+  test('real backend: complete client lifecycle over HTTP', () async {
+    final api = ApiClient()..baseUrl = 'http://127.0.0.1:8766';
+    final repo = ClientRepository(api);
+    final store = MemorySessionStore();
+    final session = ClientSession(repo, store);
+    addTearDown(() { session.dispose(); api.dispose(); });
+    expect((await api.request('GET', '/__mobile_smoke'))['environment'], 'isolated-mobile-smoke');
+    final email = 'mobile-${DateTime.now().microsecondsSinceEpoch}@example.com';
+    await repo.register({'nombres': 'Mobile', 'apellidos': 'Test', 'correo': email, 'password': 'MobileTest123!'});
+    await session.login(api.baseUrl, email, 'MobileTest123!');
+    expect(store.value, isNotNull);
+    final products = await repo.catalog(); expect(products, isNotEmpty);
+    final product = products.first;
+    expect(await repo.catalog({'nombre': product['nombre']}), isNotEmpty);
+    final variants = await repo.variants(product['id_producto']);
+    expect((await repo.availability(product['id_producto']))['disponibilidad'], isNotEmpty);
+    final variant = (variants['variantes'] as List).first['id_variante'] as int;
+    await repo.addItem(variant, 1);
+    var cart = await repo.cart();
+    final item = (cart['items'] as List).first;
+    await repo.changeQuantity(item['id_detalle'], 2);
+    expect((await repo.cart())['items'][0]['cantidad'], 2);
+    await repo.removeItem(item['id_detalle']); expect((await repo.cart())['items'], isEmpty);
+    await repo.addItem(variant, 1);
+    final order = await repo.createOrder(); expect(order['estado'], 'PENDIENTE');
+    expect((await repo.order(order['id_pedido']))['detalles'], isNotEmpty);
+    final payment = await repo.preparePayment(order['id_pedido'], 'QR');
+    expect((await repo.preparePayment(order['id_pedido'], 'TARJETA'))['id_pago'], payment['id_pago']);
+    await repo.simulatePayment(payment['id_pago'], false);
+    final retry = await repo.preparePayment(order['id_pedido'], 'TARJETA');
+    expect(retry['metodo_pago'], 'TARJETA');
+    await repo.simulatePayment(retry['id_pago'], true);
+    expect((await repo.order(order['id_pedido']))['estado'], 'CONFIRMADO');
+    expect(await repo.orders(), isNotEmpty);
+    final available = await repo.reservationAvailability(); expect(available, isNotEmpty);
+    await repo.reserve(available.first['id_inventario'], 1);
+    final reservations = await repo.reservations(); expect(reservations, hasLength(1));
+    await repo.cancelReservation(reservations.first['id_reserva']);
+    expect((await repo.reservations()).first['estado'], 'CANCELADA');
+    final profile = await repo.updateProfile({'nombres': 'Cliente móvil', 'telefono': '70000000'});
+    expect(profile['nombres'], 'Cliente móvil'); expect((await repo.profile())['telefono'], '70000000');
+    await repo.preference('favorita', product['id_producto']);
+    expect(await repo.recommendations({}), isNotEmpty);
+    final fitting = await repo.fittingVariants(); expect(fitting, isNotEmpty);
+    expect((await repo.fit(fitting.first['id_variante']))['garment'], isNotNull);
+    final oldToken = api.token;
+    await session.logout(); expect(store.value, isNull);
+    api.token = oldToken;
+    await expectLater(repo.profile(), throwsA(isA<ApiException>().having((e) => e.status, 'status', 401)));
+    // ignore: avoid_print
+    print('LIVE PASS: auth, JWT revocation, catalog, filters, variants, stock, cart CRUD, order, payment reject/retry/approve, reservations, profile, recommendations, fitting.');
+  }, timeout: const Timeout(Duration(minutes: 2)));
+}

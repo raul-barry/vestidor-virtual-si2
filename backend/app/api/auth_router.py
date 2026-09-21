@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import get_current_user
+from app.core.security import bearer_scheme
+from fastapi.security import HTTPAuthorizationCredentials
 from app.database.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.auth import (
@@ -12,6 +14,7 @@ from app.schemas.auth import (
     LogoutResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
+    PasswordResetTokenRequest,
     PasswordResetResponse,
     RegisterRequest,
     RegisterResponse,
@@ -71,9 +74,10 @@ def login(request: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse
     },
 )
 def logout(
-    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> LogoutResponse:
-    AuthService(db).logout_user(current_user)
+    AuthService(db).logout_user(current_user, credentials.credentials)
     return LogoutResponse(message="Sesión cerrada correctamente")
 
 
@@ -92,8 +96,18 @@ def request_password_reset(
     token = AuthService(db).request_password_reset(request)
     return PasswordResetResponse(
         message="Solicitud de recuperación generada correctamente",
-        token=token if settings.expose_reset_token else None,
+        token=token if settings.expose_reset_token and settings.environment in ("development", "test") and not settings.smtp_configured else None,
     )
+
+
+@auth_router.post(
+    "/validate-password-reset",
+    response_model=PasswordResetResponse,
+    responses={400: {"description": "Token de recuperación inválido o expirado"}},
+)
+def validate_password_reset(request: PasswordResetTokenRequest, db: Session = Depends(get_db)) -> PasswordResetResponse:
+    AuthService(db).validate_password_reset_token(request.token)
+    return PasswordResetResponse(message="Token de recuperación válido")
 
 
 @auth_router.post(

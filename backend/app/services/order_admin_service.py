@@ -62,6 +62,11 @@ class OrderAdminService:
         old_state = order.estado
         if new_state not in self.TRANSITIONS.get(old_state, set()):
             raise AppException("Transición de estado no permitida", status_code=422)
+        payment = self.repository.get_payment_by_order(id_pedido)
+        if new_state == "CONFIRMADO":
+            raise AppException("Confirme el pedido mediante su pago", status_code=422)
+        if new_state == "CANCELADO" and payment and payment.estado == "PAGADO":
+            raise AppException("Use devoluciones para una venta pagada", status_code=422)
 
         try:
             order = self.repository.update_order_status(order, new_state)

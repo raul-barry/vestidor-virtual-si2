@@ -9,5 +9,6 @@ class Talla(Base):
 
     id_talla: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    estado: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVO")
 
     variantes: Mapped[list["ProductoVariante"]] = relationship(back_populates="talla")

@@ -11,6 +11,8 @@ class Producto(Base):
     __tablename__ = "producto"
 
     id_producto: Mapped[int] = mapped_column(primary_key=True)
+    id_proveedor: Mapped[int | None] = mapped_column(ForeignKey("proveedor.id_proveedor"))
+    id_coleccion: Mapped[int | None] = mapped_column(ForeignKey("coleccion.id_coleccion"))
     id_categoria: Mapped[int] = mapped_column(ForeignKey("categoria.id_categoria"), nullable=False, index=True)
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)

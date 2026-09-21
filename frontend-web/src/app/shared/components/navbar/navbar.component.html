@@ -1,0 +1,20 @@
+<header class="navbar" [class.staff]="staff">
+  <div class="navbar-top">
+    @if (staff) { <button mat-stroked-button class="menu-toggle" type="button" (click)="toggleMenu.emit()" [attr.aria-expanded]="expanded" aria-controls="workspace-navigation">{{ expanded ? 'Cerrar menú' : 'Menú' }}</button> }
+    <a class="brand" [routerLink]="homeForRole(role)" aria-label="Fashion Store, inicio"><span class="brand-mark" aria-hidden="true">FS</span><span>FASHION <strong>STORE</strong></span></a>
+    <div class="account">
+      @if (staff) { <span class="role-label">{{ roleLabel }}</span> }
+      @if (signedIn) { <button mat-stroked-button type="button" (click)="signOut.emit()">Cerrar sesión</button> }
+      @else if (authPage === 'login') { <a mat-flat-button color="primary" routerLink="/auth/register">Registrarse</a> }
+      @else if (authPage === 'register') { <a mat-button routerLink="/auth/login">Iniciar sesión</a> }
+      @else { <a mat-button routerLink="/auth/login">Iniciar sesión</a><a mat-flat-button color="primary" routerLink="/auth/register">Crear cuenta</a> }
+    </div>
+  </div>
+  @if (!staff) {
+    <nav class="shop-links" aria-label="Navegación de la tienda">
+      @for (item of customerLinks; track item.path) {
+        @if (signedIn || item.path === '/catalog') { <a [routerLink]="item.path" routerLinkActive="active" ariaCurrentWhenActive="page">{{ item.label }}</a> }
+      }
+    </nav>
+  }
+</header>

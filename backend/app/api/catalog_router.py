@@ -13,6 +13,7 @@ catalog_router = APIRouter(prefix="/catalog", tags=["Catalogo"])
 @catalog_router.get(
     "/products",
     response_model=list[ProductCatalogResponse],
+    response_model_exclude_none=True,
     responses={
         200: {
             "description": "Productos disponibles en el catálogo",
@@ -45,7 +46,11 @@ def get_products(db: Session = Depends(get_db)) -> list[ProductCatalogResponse]:
     return CatalogService(db).get_catalog()
 
 
-@catalog_router.get("/products/search", response_model=list[ProductCatalogResponse])
+@catalog_router.get(
+    "/products/search",
+    response_model=list[ProductCatalogResponse],
+    response_model_exclude_none=True,
+)
 def search_products(
     nombre: str | None = Query(default=None),
     categoria: str | None = Query(default=None),

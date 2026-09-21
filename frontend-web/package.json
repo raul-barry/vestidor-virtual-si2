@@ -5,7 +5,9 @@
   "scripts": {
     "start": "ng serve --host 0.0.0.0",
     "build": "node set-env.js && ng build",
-    "test": "ng test"
+    "test": "ng test",
+    "test:ci": "ng test --watch=false --karma-config=karma.conf.cjs",
+    "test:visual": "node scripts/visual-smoke.cjs"
   },
   "dependencies": {
     "@angular/animations": "^17.3.0",
@@ -18,8 +20,11 @@
     "@angular/platform-browser": "^17.3.0",
     "@angular/platform-browser-dynamic": "^17.3.0",
     "@angular/router": "^17.3.0",
+    "@stripe/stripe-js": "^4.10.0",
+    "@types/three": "^0.186.0",
     "chart.js": "^4.4.7",
     "rxjs": "~7.8.0",
+    "three": "^0.186.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.14.0"
   },

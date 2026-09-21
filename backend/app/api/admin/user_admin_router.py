@@ -4,10 +4,19 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_admin
 from app.database.database import get_db
 from app.models.usuario import Usuario
-from app.schemas.user_admin import UpdateRoleRequest, UpdateStatusRequest, UserAdminResponse
+from app.schemas.user_admin import CreateUserAdminRequest, UpdateRoleRequest, UpdateStatusRequest, UpdateUserAdminRequest, UserAdminResponse
 from app.services.user_admin_service import UserAdminService
 
 user_admin_router = APIRouter(prefix="/admin/users", tags=["Administración de usuarios"])
+
+
+@user_admin_router.post("", response_model=UserAdminResponse, status_code=201)
+def create_user(
+    request: CreateUserAdminRequest,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_admin),
+) -> UserAdminResponse:
+    return UserAdminService(db).create_user(request, current_user.id_usuario)
 
 
 @user_admin_router.get("", response_model=list[UserAdminResponse])
@@ -24,6 +33,11 @@ def get_user_detail(
     _: Usuario = Depends(get_current_admin),
 ) -> UserAdminResponse:
     return UserAdminService(db).get_user_detail(id_usuario)
+
+
+@user_admin_router.put("/{id_usuario}", response_model=UserAdminResponse)
+def update_user(id_usuario: int, request: UpdateUserAdminRequest, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_admin)) -> UserAdminResponse:
+    return UserAdminService(db).update_user(id_usuario, request, current_user.id_usuario)
 
 
 @user_admin_router.put("/{id_usuario}/status", response_model=UserAdminResponse)

@@ -3,7 +3,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.security import create_access_token
+from conftest import session_token
 from app.main import app
 from app.models.categoria import Categoria
 from app.models.color import Color
@@ -31,7 +31,7 @@ def create_headers(db, role_name: str, correo: str) -> dict[str, str]:
     )
     db.add(user)
     db.commit()
-    token = create_access_token({"id_usuario": user.id_usuario, "rol": role.nombre})
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role.nombre})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -145,3 +145,12 @@ def test_customer_cannot_access_inventory_administration(db) -> None:
     response = TestClient(app).get("/api/admin/inventory", headers=headers)
 
     assert response.status_code == 403
+
+
+def test_encargado_can_access_and_manage_inventory(db) -> None:
+    headers = create_headers(db, "ENCARGADO_SUCURSAL", "encargado@example.com")
+    variant_id, branch_id = create_variant_and_branch(db)
+    client = TestClient(app)
+    response = client.get("/api/admin/inventory", headers=headers)
+    assert response.status_code == 200
+
