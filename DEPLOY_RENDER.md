@@ -19,19 +19,19 @@ Como Render se sincroniza automáticamente con tu repositorio de GitHub, primero
 ```powershell
 git add .
 git commit -m "feat: preparar configuracion para despliegue en Render Cloud"
-git push origin desarrollo
+git push origin desarrollo  # O main si vas a desplegar desde main
 ```
 
 ---
 
 ## Opción A: Despliegue Automático con Blueprint (Recomendado - 1 Clic)
 
-El repositorio incluye un archivo [`render.yaml`](./render.yaml) que define la base de datos, el backend y el frontend de forma automatizada vinculados a la rama **`desarrollo`**.
+El repositorio incluye un archivo [`render.yaml`](./render.yaml) que define la base de datos, el backend y el frontend de forma automatizada.
 
 1. Inicia sesión en [Render Dashboard](https://dashboard.render.com/).
 2. Haz clic en el botón **"New +"** (arriba a la derecha) y selecciona **"Blueprint"**.
 3. Conecta tu cuenta de GitHub y selecciona el repositorio `vestidor-virtual-si2`.
-4. En el selector de rama (**Branch**), asegúrate de elegir **`desarrollo`**.
+4. En el selector de rama (**Branch**), asegúrate de elegir la rama que deseas desplegar (**`main`** o **`desarrollo`**).
 4. Render detectará automáticamente el archivo `render.yaml` y listará los 3 recursos a crear:
    - Base de datos: `vestidor-db`
    - Backend: `vestidor-virtual-backend`

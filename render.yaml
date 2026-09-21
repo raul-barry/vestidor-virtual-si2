@@ -10,7 +10,6 @@ services:
     name: vestidor-virtual-backend
     runtime: python
     rootDir: backend
-    branch: desarrollo
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python start.py
@@ -34,7 +33,6 @@ services:
     name: vestidor-virtual-frontend
     runtime: static
     rootDir: frontend-web
-    branch: desarrollo
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist/vestidor-virtual-web/browser
     routes:
