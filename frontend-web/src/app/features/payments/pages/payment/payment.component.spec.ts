@@ -62,10 +62,11 @@ describe('PaymentComponent', () => {
       mountStripeElement: (key: string) => void;
     };
     internals.cardClientSecret = 'secret_mock';
+    fixture.detectChanges();
 
     internals.mountStripeElement('');
 
-    expect(snackBar.open).toHaveBeenCalledWith('Stripe no est\u00e1 configurado actualmente.', 'Cerrar', { duration: 5000 });
+    expect(component.cardReady).toBeFalse();
   });
 
   it('mounts a mocked Stripe Payment Element', async () => {

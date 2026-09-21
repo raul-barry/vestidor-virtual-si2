@@ -600,7 +600,28 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Detalle':
         final p = product!;
         return [
-          Container(height: 190, decoration: BoxDecoration(color: const Color(0xffe2e9e2), borderRadius: BorderRadius.circular(20)), child: imageUrl(p).isEmpty ? const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848))) : ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.network(imageUrl(p), width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848))))),
+          Container(
+            height: 190,
+            decoration: BoxDecoration(
+              color: const Color(0xffe2e9e2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: imageUrl(p).isEmpty
+                ? const Center(
+                    child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848)),
+                  )
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.network(
+                      imageUrl(p),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848)),
+                      ),
+                    ),
+                  ),
+          ),
           const SizedBox(height: 12),
           Text(p['nombre_producto'],
               style: Theme.of(context).textTheme.headlineSmall),
@@ -859,12 +880,14 @@ class _ClientHomeState extends State<ClientHome> {
             Text('${tryOnResult!['nombre']} · ${tryOnResult!['talla'] ?? ''} · ${tryOnResult!['color'] ?? ''}'),
             const Text('Representación visual aproximada. El ajuste real de la prenda puede variar.'),
             Wrap(spacing: 8, children: [
-              button('Probar otra prenda', () => setState(() {
-                    variantId = null;
-                    tryOnProductId = null;
-                    tryOnProductName = null;
-                    tryOnResult = null;
-                  }), autoRun: false),
+              button('Probar otra prenda', () async {
+                setState(() {
+                  variantId = null;
+                  tryOnProductId = null;
+                  tryOnProductName = null;
+                  tryOnResult = null;
+                });
+              }, autoRun: false),
               button('Tomar otra foto', () => pickTryOnPhoto(ImageSource.camera), autoRun: false),
               button('Agregar al carrito', () => add(variantId!, 1)),
               if (product != null)

@@ -14,7 +14,7 @@ describe('PasswordResetRequestComponent', () => {
   let router: jasmine.SpyObj<Router>;
 
   beforeEach(async () => {
-    authService = jasmine.createSpyObj<AuthService>('AuthService', ['requestPasswordReset']);
+    authService = jasmine.createSpyObj<AuthService>('AuthService', ['requestPasswordReset', 'validatePasswordResetToken']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
 
@@ -56,11 +56,14 @@ describe('PasswordResetRequestComponent', () => {
     expect(component.tokenSectionVisible).toBeTrue();
   });
 
-  it('passes a development token to the reset section when the API exposes it', () => {
+  it('passes a development token to the reset section and continues after validation', () => {
     authService.requestPasswordReset.and.returnValue(of({ message: 'Solicitud generada', token: 'token-desarrollo' }));
+    authService.validatePasswordResetToken.and.returnValue(of({ message: 'Token válido' }));
     component.requestForm.controls.correo.setValue('cliente@example.com');
 
     component.submit();
+    expect(component.tokenForm.controls.token.value).toBe('token-desarrollo');
+    component.continueWithToken();
 
     expect(router.navigate).toHaveBeenCalledWith(['/auth/password-reset/confirm'], {
       queryParams: { token: 'token-desarrollo' }

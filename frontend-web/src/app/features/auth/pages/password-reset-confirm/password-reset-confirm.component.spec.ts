@@ -44,7 +44,7 @@ describe('PasswordResetConfirmComponent', () => {
     expect(authService.resetPassword).not.toHaveBeenCalled();
   });
 
-  it('updates the password with a valid token and redirects to login', () => {
+  it('updates the password and lets the user return to login', () => {
     authService.resetPassword.and.returnValue(of({ message: 'Contraseña actualizada' }));
     component.confirmForm.setValue({ nueva_password: 'password-nueva', confirmar_password: 'password-nueva' });
 
@@ -54,6 +54,8 @@ describe('PasswordResetConfirmComponent', () => {
       token: 'token-valido',
       nueva_password: 'password-nueva'
     });
+    expect(component.completed).toBeTrue();
+    component.goToLogin();
     expect(router.navigate).toHaveBeenCalledWith(['/auth/login']);
   });
 

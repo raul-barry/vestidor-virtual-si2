@@ -30,6 +30,15 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    @model_validator(mode="before")
+    @classmethod
+    def default_production_payment_mode(cls, values):
+        # Local development keeps demo payments enabled, while an omitted
+        # setting in production must never enable simulated charges.
+        if isinstance(values, dict) and values.get("environment") == "production" and "payment_simulation_mode" not in values:
+            values["payment_simulation_mode"] = False
+        return values
+
     @model_validator(mode="after")
     def validate_production(self):
         if self.environment == "production":
