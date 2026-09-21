@@ -32,5 +32,7 @@ const envConfigFile = `export const environment = {
 
 fs.writeFileSync(path.join(targetDir, 'environment.ts'), envConfigFile);
 fs.writeFileSync(path.join(targetDir, 'environment.prod.ts'), envConfigFile);
+fs.writeFileSync(path.join(targetDir, 'environment.production.ts'), envConfigFile);
 
 console.log(`[set-env] Successfully configured API_URL = '${apiUrl}' (production: ${isProd})`);
+
