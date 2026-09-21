@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "ng serve --host 0.0.0.0",
-    "build": "ng build",
+    "build": "node set-env.js && ng build",
     "test": "ng test"
   },
   "dependencies": {

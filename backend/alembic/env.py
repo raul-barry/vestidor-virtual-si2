@@ -8,6 +8,8 @@ from app.models.base import Base
 
 config = context.config
 database_url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
 config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
