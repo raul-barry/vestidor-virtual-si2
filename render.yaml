@@ -43,7 +43,4 @@ services:
         destination: /index.html
     envVars:
       - key: API_URL
-        fromService:
-          type: web
-          name: vestidor-virtual-backend
-          property: host
+        value: https://vestidor-virtual-backend.onrender.com
