@@ -20,6 +20,7 @@ import { SupplierDialogComponent } from './supplier-dialog.component';
             <ng-container matColumnDef="empresa"><th mat-header-cell *matHeaderCellDef>Empresa</th><td mat-cell *matCellDef="let row"><strong>{{ row.nombre }}</strong><br><small>{{ row.descripcion || 'Sin descripción' }}</small></td></ng-container>
             <ng-container matColumnDef="contacto"><th mat-header-cell *matHeaderCellDef>Contacto</th><td mat-cell *matCellDef="let row">{{ row.persona_contacto || '-' }}<br><small>{{ row.telefono || '-' }} · {{ row.correo || '-' }}</small></td></ng-container>
             <ng-container matColumnDef="direccion"><th mat-header-cell *matHeaderCellDef>Dirección</th><td mat-cell *matCellDef="let row">{{ row.direccion || '-' }}</td></ng-container>
+            <ng-container matColumnDef="productos"><th mat-header-cell *matHeaderCellDef>Productos</th><td mat-cell *matCellDef="let row">{{ row.productos?.length ? row.productos.map(productName).join(', ') : '-' }}</td></ng-container>
             <ng-container matColumnDef="estado"><th mat-header-cell *matHeaderCellDef>Estado</th><td mat-cell *matCellDef="let row"><span class="state" [class.inactive]="row.estado === 'INACTIVO'">{{ row.estado }}</span></td></ng-container>
             <ng-container matColumnDef="acciones"><th mat-header-cell *matHeaderCellDef>Acciones</th><td mat-cell *matCellDef="let row"><button mat-button (click)="openDialog(row)">Editar</button><button mat-button [color]="row.estado === 'ACTIVO' ? 'warn' : 'primary'" (click)="toggle(row)">{{ row.estado === 'ACTIVO' ? 'Desactivar' : 'Activar' }}</button></td></ng-container>
             <tr mat-header-row *matHeaderRowDef="columns"></tr><tr mat-row *matRowDef="let row; columns: columns"></tr>
@@ -36,7 +37,8 @@ export class SupplierListComponent implements OnInit {
   private snack = inject(MatSnackBar);
   suppliers: Supplier[] = [];
   loading = true;
-  columns = ['empresa', 'contacto', 'direccion', 'estado', 'acciones'];
+  columns = ['empresa', 'contacto', 'direccion', 'productos', 'estado', 'acciones'];
+  productName(product: { nombre: string }): string { return product.nombre; }
 
   ngOnInit(): void { this.load(); }
   load(): void { this.loading = true; this.service.listSuppliers().subscribe({ next: rows => { this.suppliers = rows; this.loading = false; }, error: () => { this.loading = false; this.notify('No fue posible cargar los proveedores'); } }); }

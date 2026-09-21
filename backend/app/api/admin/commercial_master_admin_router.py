@@ -25,6 +25,7 @@ class SupplierRequest(BaseModel):
     correo: str = Field(default="", max_length=255)
     direccion: str = Field(default="", max_length=255)
     estado: Literal["ACTIVO", "INACTIVO"] = "ACTIVO"
+    id_productos: list[int] = Field(default_factory=list)
 
 
 class CollectionRequest(BaseModel):
@@ -47,8 +48,28 @@ class StateRequest(BaseModel):
     estado: Literal["ACTIVO", "INACTIVO"]
 
 
-def serialize(row: Proveedor | Coleccion | Producto) -> dict:
-    return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+def serialize(row: Proveedor | Coleccion | Producto, db: Session | None = None) -> dict:
+    data = {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    if isinstance(row, Proveedor) and db is not None:
+        data["productos"] = [
+            {"id_producto": product.id_producto, "nombre": product.nombre}
+            for product in db.scalars(select(Producto).where(Producto.id_proveedor == row.id_proveedor).order_by(Producto.nombre)).all()
+        ]
+    return data
+
+
+def set_supplier_products(db: Session, supplier_id: int, product_ids: list[int]) -> None:
+    selected = set(product_ids)
+    products = db.scalars(select(Producto).where(Producto.id_producto.in_(selected))).all() if selected else []
+    if len(products) != len(selected):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Uno de los productos no existe")
+    if any(product.id_proveedor not in (None, supplier_id) for product in products):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Uno de los productos ya está asociado a otro proveedor")
+    for product in db.scalars(select(Producto).where(Producto.id_proveedor == supplier_id)).all():
+        if product.id_producto not in selected:
+            product.id_proveedor = None
+    for product in products:
+        product.id_proveedor = supplier_id
 
 
 def commit(db: Session) -> None:
@@ -61,7 +82,7 @@ def commit(db: Session) -> None:
 
 @commercial_master_admin_router.get("/suppliers")
 def list_suppliers(db: Session = Depends(get_db), _: Usuario = Depends(get_current_admin)) -> list[dict]:
-    return [serialize(row) for row in db.scalars(select(Proveedor).order_by(Proveedor.nombre)).all()]
+    return [serialize(row, db) for row in db.scalars(select(Proveedor).order_by(Proveedor.nombre)).all()]
 
 
 @commercial_master_admin_router.post("/suppliers", status_code=status.HTTP_201_CREATED)
@@ -70,12 +91,14 @@ def create_supplier(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_admin),
 ) -> dict:
-    values = data.model_dump()
+    values = data.model_dump(exclude={"id_productos"})
     row = Proveedor(**values, contacto=values["persona_contacto"])
     db.add(row)
+    db.flush()
+    set_supplier_products(db, row.id_proveedor, data.id_productos)
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Creación proveedor: {data.nombre}"))
     commit(db)
-    return serialize(row)
+    return serialize(row, db)
 
 
 @commercial_master_admin_router.put("/suppliers/{supplier_id}")
@@ -88,12 +111,13 @@ def update_supplier(
     row = db.get(Proveedor, supplier_id)
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Proveedor no encontrado")
-    for key, value in data.model_dump().items():
+    for key, value in data.model_dump(exclude={"id_productos"}).items():
         setattr(row, key, value)
     row.contacto = data.persona_contacto
+    set_supplier_products(db, supplier_id, data.id_productos)
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Edición proveedor: {supplier_id}"))
     commit(db)
-    return serialize(row)
+    return serialize(row, db)
 
 
 @commercial_master_admin_router.patch("/suppliers/{supplier_id}/status")

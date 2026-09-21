@@ -9,6 +9,7 @@ from app.main import app
 from app.models.bitacora import Bitacora
 from app.models.token_recuperacion import TokenRecuperacion
 from app.models.usuario import Usuario
+from app.core.config import settings
 
 
 def register_payload() -> dict[str, str]:
@@ -130,3 +131,45 @@ def test_password_reset_endpoints_are_documented_in_openapi() -> None:
     assert "requestBody" in reset_operation
     assert "200" in reset_operation["responses"]
     assert "400" in reset_operation["responses"]
+
+
+def test_request_reset_sends_email_and_does_not_expose_token(db, monkeypatch) -> None:
+    client = TestClient(app)
+    create_registered_client(db, client)
+
+    class FakeSMTP:
+        sent = None
+
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            pass
+
+        def login(self, username, password):
+            self.credentials = (username, password)
+
+        def send_message(self, message):
+            FakeSMTP.sent = message
+
+    monkeypatch.setattr(settings, "smtp_host", "smtp.example.test")
+    monkeypatch.setattr(settings, "smtp_port", 587)
+    monkeypatch.setattr(settings, "smtp_from", "no-reply@example.test")
+    monkeypatch.setattr(settings, "smtp_username", "smtp-user")
+    monkeypatch.setattr(settings, "smtp_password", "smtp-password")
+    monkeypatch.setattr(settings, "smtp_starttls", True)
+    monkeypatch.setattr("app.services.auth_service.smtplib.SMTP", FakeSMTP)
+
+    response = client.post("/api/auth/request-password-reset", json={"correo": "cliente@example.com"})
+
+    assert response.status_code == 200
+    assert "token" not in response.json()
+    assert FakeSMTP.sent is not None
+    assert "Token de recuperación:" in FakeSMTP.sent.get_content()

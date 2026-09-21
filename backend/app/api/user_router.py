@@ -29,9 +29,11 @@ def customer_for(user: Usuario, db: Session) -> Cliente:
 @user_router.get("/profile/preferences")
 def get_preferences(db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     customer = customer_for(current_user, db); pref = db.scalar(select(PreferenciaCliente).where(PreferenciaCliente.id_cliente == customer.id_cliente))
-    if not pref: return {"talla_superior":None,"talla_pantalon":None,"talla_calzado":None,"id_colores":[],"estilos":[]}
-    colors = db.scalars(select(PreferenciaClienteColor.id_color).where(PreferenciaClienteColor.id_preferencia == pref.id_preferencia)).all()
-    return {"talla_superior":pref.talla_superior,"talla_pantalon":pref.talla_pantalon,"talla_calzado":pref.talla_calzado,"id_colores":colors,"estilos":[x for x in pref.estilos.split(',') if x]}
+    if not pref: return {"talla_superior":None,"talla_pantalon":None,"talla_calzado":None,"id_colores":[],"colores":[],"estilos":[]}
+    color_ids = db.scalars(select(PreferenciaClienteColor.id_color).where(PreferenciaClienteColor.id_preferencia == pref.id_preferencia)).all()
+    colors = db.scalars(select(Color).where(Color.id_color.in_(color_ids))).all() if color_ids else []
+    names_by_id = {color.id_color: color.nombre for color in colors}
+    return {"talla_superior":pref.talla_superior,"talla_pantalon":pref.talla_pantalon,"talla_calzado":pref.talla_calzado,"id_colores":color_ids,"colores":[names_by_id[color_id] for color_id in color_ids if color_id in names_by_id],"estilos":[x for x in pref.estilos.split(',') if x]}
 
 @user_router.put("/profile/preferences")
 def save_preferences(data: PreferencesRequest, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):

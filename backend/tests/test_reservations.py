@@ -61,3 +61,18 @@ def test_payment_consumes_stock_once_and_rejects_shortage(db):
     assert client.put(f"/api/payments/{payment['id_pago']}/approve", headers=customer).status_code == 409
     fetched = client.get(f"/api/payments/order/{order['id_pedido']}", headers=customer)
     assert fetched.json()['estado'] == 'PENDIENTE'
+
+
+def test_availability_can_be_filtered_by_selected_variant(db):
+    seed_initial_data(db)
+    db.commit()
+    client = TestClient(app)
+    customer = login(client, "cliente")
+    inventory = db.scalar(select(Inventario))
+
+    response = client.get(f"/api/reservations/availability?id_variante={inventory.id_variante}", headers=customer)
+
+    assert response.status_code == 200
+    assert response.json()
+    assert all(row["id_variante"] == inventory.id_variante for row in response.json())
+    assert all(row["disponible"] > 0 for row in response.json())

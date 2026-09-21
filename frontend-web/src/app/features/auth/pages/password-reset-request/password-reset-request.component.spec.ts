@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 import { PasswordResetRequestComponent } from './password-reset-request.component';
@@ -10,16 +11,19 @@ describe('PasswordResetRequestComponent', () => {
   let fixture: ComponentFixture<PasswordResetRequestComponent>;
   let authService: jasmine.SpyObj<AuthService>;
   let snackBar: jasmine.SpyObj<MatSnackBar>;
+  let router: jasmine.SpyObj<Router>;
 
   beforeEach(async () => {
     authService = jasmine.createSpyObj<AuthService>('AuthService', ['requestPasswordReset']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
+    router = jasmine.createSpyObj<Router>('Router', ['navigate']);
 
     TestBed.configureTestingModule({
       imports: [PasswordResetRequestComponent, NoopAnimationsModule],
       providers: [
         { provide: AuthService, useValue: authService },
-        { provide: MatSnackBar, useValue: snackBar }
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: Router, useValue: router }
       ]
     }).overrideComponent(PasswordResetRequestComponent, {
       set: { providers: [{ provide: MatSnackBar, useValue: snackBar }] }
@@ -48,6 +52,18 @@ describe('PasswordResetRequestComponent', () => {
     expect(authService.requestPasswordReset).toHaveBeenCalledWith('cliente@example.com');
     expect(snackBar.open).toHaveBeenCalledWith('Solicitud enviada correctamente', 'Cerrar', {
       duration: 3000
+    });
+    expect(component.tokenSectionVisible).toBeTrue();
+  });
+
+  it('passes a development token to the reset section when the API exposes it', () => {
+    authService.requestPasswordReset.and.returnValue(of({ message: 'Solicitud generada', token: 'token-desarrollo' }));
+    component.requestForm.controls.correo.setValue('cliente@example.com');
+
+    component.submit();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/auth/password-reset/confirm'], {
+      queryParams: { token: 'token-desarrollo' }
     });
   });
 

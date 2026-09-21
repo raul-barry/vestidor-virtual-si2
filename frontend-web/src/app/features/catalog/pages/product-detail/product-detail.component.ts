@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -37,6 +37,7 @@ import { BackLinkComponent } from '../../../../shared/components/back-link.compo
 })
 export class ProductDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly catalogService = inject(CatalogService);
   private readonly cartService = inject(CartService);
   private readonly snackBar = inject(MatSnackBar);
@@ -121,6 +122,26 @@ export class ProductDetailComponent implements OnInit {
   private handleError(): void {
     this.isLoading = false;
     this.snackBar.open('No fue posible cargar el detalle del producto', 'Cerrar', { duration: 5000 });
+  }
+
+  reserveSelectedVariant(): void {
+    if (!this.selectedVariant) {
+      this.snackBar.open('Selecciona una talla y un color disponibles', 'Cerrar', { duration: 4000 });
+      return;
+    }
+    if (!this.hasSession()) {
+      this.snackBar.open('Inicia sesión para reservar esta prenda', 'Cerrar', { duration: 4000 });
+      return;
+    }
+    void this.router.navigate(['/reservations'], { queryParams: {
+      producto_id: this.productId,
+      producto_nombre: this.variants?.nombre_producto ?? '',
+      variante_id: this.selectedVariant.id_variante,
+      talla: this.selectedVariant.talla,
+      color: this.selectedVariant.color,
+      imagen: this.imageUrl,
+      precio: this.price
+    }});
   }
 
   useFallbackImage(event: Event): void {

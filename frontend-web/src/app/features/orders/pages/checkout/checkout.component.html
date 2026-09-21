@@ -44,9 +44,9 @@
             @if (!isDelivery) {
               <mat-form-field appearance="outline"><mat-label>Sucursal de recojo</mat-label><mat-select formControlName="id_sucursal_entrega"><mat-option [value]="0">Selecciona una sucursal</mat-option>@for (branch of branches; track branch.id_sucursal) { <mat-option [value]="branch.id_sucursal">{{ branch.nombre }} — {{ branch.direccion }}</mat-option> }</mat-select></mat-form-field>
             } @else {
-              <mat-form-field appearance="outline"><mat-label>DirecciÃ³n</mat-label><input matInput formControlName="direccion_entrega" /></mat-form-field>
+              <mat-form-field appearance="outline"><mat-label>Dirección</mat-label><input matInput formControlName="direccion_entrega" /></mat-form-field>
               <mat-form-field appearance="outline"><mat-label>Referencia (opcional)</mat-label><input matInput formControlName="referencia_entrega" /></mat-form-field>
-              <mat-form-field appearance="outline"><mat-label>TelÃ©fono</mat-label><input matInput formControlName="telefono_entrega" /></mat-form-field>
+              <mat-form-field appearance="outline"><mat-label>Teléfono</mat-label><input matInput formControlName="telefono_entrega" /></mat-form-field>
             }
           </form>
           <button mat-flat-button color="primary" type="button" [disabled]="isSubmitting" (click)="createOrder()">

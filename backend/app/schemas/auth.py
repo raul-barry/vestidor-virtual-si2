@@ -31,6 +31,10 @@ class PasswordResetConfirm(BaseModel):
     nueva_password: str = Field(min_length=8)
 
 
+class PasswordResetTokenRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=255)
+
+
 class PasswordResetResponse(BaseModel):
     message: str
     token: str | None = None

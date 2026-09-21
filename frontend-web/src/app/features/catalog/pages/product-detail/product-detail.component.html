@@ -28,6 +28,9 @@
           <button class="cart-cta" mat-stroked-button type="button" [disabled]="isAddingToCart" (click)="addToCart()">
             {{ isAddingToCart ? 'Agregando...' : 'Agregar al carrito' }}
           </button>
+          <button class="reserve-cta" mat-stroked-button type="button" (click)="reserveSelectedVariant()">
+            Reservar prenda
+          </button>
           @if (hasSession()) {<button mat-button type="button" (click)="recordPreference('favorita')">Marcar categoría favorita</button>}
         </mat-card-content>
       </mat-card>

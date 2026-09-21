@@ -32,6 +32,14 @@ class StripeIntentResponse(BaseModel):
     client_secret: str
     publishable_key: str
     payment: PaymentResponse
+    simulation: bool = False
+
+
+class QRPaymentResponse(BaseModel):
+    payment: PaymentResponse
+    qr_payload: str
+    provider_reference: str
+    simulation: bool = True
 
 
 class PaymentStatusResponse(BaseModel):

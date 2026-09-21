@@ -93,4 +93,8 @@ export class AuthService {
   resetPassword(request: PasswordResetConfirm): Observable<MessageResponse> {
     return this.api.post<MessageResponse>('/api/auth/reset-password', request);
   }
+
+  validatePasswordResetToken(token: string): Observable<MessageResponse> {
+    return this.api.post<MessageResponse>('/api/auth/validate-password-reset', { token });
+  }
 }

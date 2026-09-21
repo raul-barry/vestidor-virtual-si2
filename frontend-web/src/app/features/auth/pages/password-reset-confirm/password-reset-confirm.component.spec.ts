@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 import { PasswordResetConfirmComponent } from './password-reset-confirm.component';
@@ -23,6 +23,7 @@ describe('PasswordResetConfirmComponent', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: Router, useValue: router },
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ token: 'token-valido' }) } } },
         { provide: MatSnackBar, useValue: snackBar }
       ]
     }).overrideComponent(PasswordResetConfirmComponent, {
@@ -45,7 +46,7 @@ describe('PasswordResetConfirmComponent', () => {
 
   it('updates the password with a valid token and redirects to login', () => {
     authService.resetPassword.and.returnValue(of({ message: 'Contraseña actualizada' }));
-    component.confirmForm.setValue({ token: 'token-valido', nueva_password: 'password-nueva' });
+    component.confirmForm.setValue({ nueva_password: 'password-nueva', confirmar_password: 'password-nueva' });
 
     component.submit();
 
@@ -60,7 +61,7 @@ describe('PasswordResetConfirmComponent', () => {
     authService.resetPassword.and.returnValue(
       throwError(() => ({ error: { message: 'Token de recuperación inválido o expirado' } }))
     );
-    component.confirmForm.setValue({ token: 'token-invalido', nueva_password: 'password-nueva' });
+    component.confirmForm.setValue({ nueva_password: 'password-nueva', confirmar_password: 'password-nueva' });
 
     component.submit();
 

@@ -158,7 +158,7 @@ def test_delivery_persists_address_and_active_branch_lookup(db) -> None:
         "/api/orders", headers=headers,
         json={
             "tipo_entrega": "DELIVERY", "direccion_entrega": "Av. Siempre Viva 123",
-            "referencia_entrega": "PortÃ³n azul", "telefono_entrega": "70000000",
+            "referencia_entrega": "Portón azul", "telefono_entrega": "70000000",
         },
     )
 
@@ -167,5 +167,5 @@ def test_delivery_persists_address_and_active_branch_lookup(db) -> None:
     assert response.status_code == 201
     detail = client.get(f"/api/orders/{response.json()['id_pedido']}", headers=headers).json()
     assert detail["direccion_entrega"] == "Av. Siempre Viva 123"
-    assert detail["referencia_entrega"] == "PortÃ³n azul"
+    assert detail["referencia_entrega"] == "Portón azul"
     assert detail["telefono_entrega"] == "70000000"

@@ -7,7 +7,6 @@ import '../services/api_client.dart';
 import '../services/client_repository.dart';
 import '../services/client_session.dart';
 import '../services/session_store.dart';
-import 'fitting_painter.dart';
 
 class ClientHome extends StatefulWidget {
   const ClientHome({super.key, this.repository, this.sessionStore});
@@ -39,6 +38,7 @@ class _ClientHomeState extends State<ClientHome> {
   String message = '';
   List<Json> rows = [];
   List<Json> availability = [];
+  List<Json> fittingAvailability = [];
   Json cart = {};
   Json? product;
   Json? fitting;
@@ -79,6 +79,7 @@ class _ClientHomeState extends State<ClientHome> {
   void clearClientData() {
     rows = [];
     availability = [];
+    fittingAvailability = [];
     cart = {};
     product = null;
     fitting = null;
@@ -185,6 +186,8 @@ class _ClientHomeState extends State<ClientHome> {
         });
       case 'Vestidor':
         rows = await repository.fittingVariants();
+        fittingAvailability = await repository.reservationAvailability();
+        _filterFittingAvailability();
         if (tryOnProductId == null &&
             !rows.any((r) => r['id_variante'] == variantId)) {
           variantId = null;
@@ -277,6 +280,14 @@ class _ClientHomeState extends State<ClientHome> {
     message = 'Prenda agregada al carrito';
   }
 
+  void _filterFittingAvailability() {
+    availability = fittingAvailability.where((item) {
+      final matches = variantId == null || item['id_variante'] == variantId;
+      final stock = (item['disponible'] as num?)?.toInt() ?? 0;
+      return matches && stock > 0;
+    }).toList();
+  }
+
   Future<void> openPhotoTryOn() async {
     final selectedProduct = product;
     if (selectedProduct == null || variantId == null) return;
@@ -286,6 +297,7 @@ class _ClientHomeState extends State<ClientHome> {
       rows = [];
       availability = [];
       fitting = null;
+      fittingAvailability = [];
       tryOnPhoto = null;
       tryOnResult = null;
       tryOnProductId = selectedProduct['id_producto'] as int;
@@ -336,6 +348,25 @@ class _ClientHomeState extends State<ClientHome> {
           tryOnPhoto!, tryOnProductId!, variantId!);
       message = '';
     });
+  }
+
+  Future<void> reserveTryOn() async {
+    if (variantId == null) throw ApiException(0, 'Selecciona una talla y color.');
+    if (availability.isEmpty) {
+      throw ApiException(0, 'Esta variante no tiene stock disponible para reservar.');
+    }
+    if (inventoryId == null || !availability.any((i) => i['id_inventario'] == inventoryId)) {
+      inventoryId = availability.first['id_inventario'] as int;
+    }
+    await repository.reserve(inventoryId!, 1);
+    message = 'Reserva realizada correctamente';
+    await load();
+  }
+
+  String imageUrl(Json item) {
+    final value = item['imagen_url'] as String?;
+    if (value == null || value.isEmpty) return '';
+    return value.startsWith('http') ? value : '${repository.api.baseUrl}$value';
   }
 
   Future<void> openOrder(Json order) async {
@@ -557,7 +588,7 @@ class _ClientHomeState extends State<ClientHome> {
             Card(
                 child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    leading: Container(width: 48, height: 58, decoration: BoxDecoration(color: const Color(0xffe1e9e2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.checkroom, color: Color(0xff0d5848))),
+                    leading: imageUrl(r).isEmpty ? Container(width: 48, height: 58, decoration: BoxDecoration(color: const Color(0xffe1e9e2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.checkroom, color: Color(0xff0d5848))) : ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(imageUrl(r), width: 48, height: 58, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.checkroom))),
                     title: Text(r['nombre']),
                     subtitle: Text(
                         '${r['categoria']['nombre']} · Bs ${r['precio_base']}'),
@@ -569,7 +600,7 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Detalle':
         final p = product!;
         return [
-          Container(height: 190, decoration: BoxDecoration(color: const Color(0xffe2e9e2), borderRadius: BorderRadius.circular(20)), child: const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848)))),
+          Container(height: 190, decoration: BoxDecoration(color: const Color(0xffe2e9e2), borderRadius: BorderRadius.circular(20)), child: imageUrl(p).isEmpty ? const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848))) : ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.network(imageUrl(p), width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.checkroom, size: 82, color: Color(0xff0d5848))))),
           const SizedBox(height: 12),
           Text(p['nombre_producto'],
               style: Theme.of(context).textTheme.headlineSmall),
@@ -608,7 +639,7 @@ class _ClientHomeState extends State<ClientHome> {
               onPressed:
                   busy || variantId == null ? null : () => openPhotoTryOn(),
               icon: const Icon(Icons.view_in_ar),
-              label: const Text('Probar prenda')),
+              label: const Text('Abrir probador con cámara')),
           TextButton(
               onPressed: busy ? null : () => go('Catálogo'),
               child: const Text('Volver al catálogo'))
@@ -768,7 +799,7 @@ class _ClientHomeState extends State<ClientHome> {
         ];
       case 'Vestidor':
         return [
-          Container(width: double.infinity, padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xff153f33), borderRadius: BorderRadius.circular(18)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text('FASHION STORE · VESTIDOR 3D', style: TextStyle(color: Color(0xffa7ddbb), fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Prueba tu próxima prenda', style: TextStyle(color: Colors.white, fontSize: 24, fontFamily: 'serif')), SizedBox(height: 8), Text('Vista orientativa por tipo y color.', style: TextStyle(color: Color(0xffdbe9e0)))])),
+          Container(width: double.infinity, padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xff153f33), borderRadius: BorderRadius.circular(18)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children:[Text('FASHION STORE · PROBADOR CON CÁMARA', style: TextStyle(color: Color(0xffa7ddbb), fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Pruébate una prenda real', style: TextStyle(color: Colors.white, fontSize: 24, fontFamily: 'serif')), SizedBox(height: 8), Text('Usa una foto o la cámara del móvil y visualiza la prenda del catálogo sobre tu cuerpo.', style: TextStyle(color: Color(0xffdbe9e0)))])),
           DropdownButtonFormField<int>(
               key: ValueKey('fitting-$variantId'),
               initialValue: rows.any((r) => r['id_variante'] == variantId)
@@ -796,6 +827,7 @@ class _ClientHomeState extends State<ClientHome> {
                         tryOnResult = null;
                         garmentScale = 1;
                         garmentOffset = 0;
+                        _filterFittingAvailability();
                       })),
           if (tryOnProductName != null)
             Text('Prenda seleccionada: $tryOnProductName'),
@@ -810,28 +842,17 @@ class _ClientHomeState extends State<ClientHome> {
           ],
           if (rows.isEmpty && !busy && !failed)
             empty('No hay prendas compatibles disponibles.'),
-          const Text('Tamaño'),
-          Slider(
-              value: garmentScale,
-              min: .5,
-              max: 1.8,
-              onChanged: busy ? null : (v) => setState(() => garmentScale = v)),
-          const Text('Posición vertical'),
-          Slider(
-              value: garmentOffset,
-              min: -60,
-              max: 100,
-              onChanged:
-                  busy ? null : (v) => setState(() => garmentOffset = v)),
-          ClipRect(
-              child: SizedBox(
-                  height: 400,
-                  child: Semantics(
-                      label: 'Maniquí con la prenda seleccionada',
-                      child: CustomPaint(
-                          painter: FittingPainter(
-                              fitting, garmentScale, garmentOffset),
-                          child: const SizedBox.expand())))),
+          if (variantId != null && availability.isNotEmpty) ...[
+            DropdownButtonFormField<int>(
+                key: ValueKey('tryon-branch-$inventoryId'),
+                initialValue: availability.any((i) => i['id_inventario'] == inventoryId) ? inventoryId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Sucursal para reservar'),
+                items: [for (final i in availability) DropdownMenuItem(value: i['id_inventario'] as int, child: Text('${i['sucursal']} · stock ${i['disponible']}'))],
+                onChanged: busy ? null : (v) => setState(() => inventoryId = v)),
+            button('Reservar esta prenda', reserveTryOn, enabled: inventoryId != null),
+          ] else if (variantId != null)
+            const Text('Esta talla y color no tienen stock disponible para reservar.'),
           if (tryOnResult != null) ...[
             const Text('PRUEBA VIRTUAL', style: TextStyle(fontWeight: FontWeight.bold)),
             Image.memory(base64Decode(tryOnResult!['image_base64'] as String), fit: BoxFit.contain),
@@ -850,11 +871,9 @@ class _ClientHomeState extends State<ClientHome> {
                 button('Volver al producto', () => detail(product!)),
             ])
           ],
-          if (fitting != null) ...[
-            Text(
-                '${fitting!['nombre']} · ${fitting!['talla']} · ${fitting!['color']}'),
-            button('Agregar al carrito', () => add(fitting!['id_variante'], 1))
-          ]
+          ExpansionTile(title: const Text('Visor 3D de respaldo'), children: [
+            const Padding(padding: EdgeInsets.all(12), child: Text('El probador con cámara es la experiencia principal. El visor 3D queda disponible como alternativa cuando no puedas usar una foto.')),
+          ]),
         ];
       case 'Perfil':
         return [

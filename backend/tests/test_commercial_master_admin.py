@@ -68,6 +68,26 @@ def test_supplier_crud_with_logical_status(db) -> None:
     assert any(row["id_proveedor"] == supplier_id for row in client.get("/api/admin/suppliers", headers=headers).json())
 
 
+def test_supplier_can_be_associated_with_products(db) -> None:
+    client = TestClient(app)
+    headers = admin_headers(db)
+    category = Categoria(nombre="Ropa", descripcion="")
+    db.add(category)
+    db.flush()
+    product = Producto(id_categoria=category.id_categoria, nombre="Camisa proveedor", descripcion="", precio_base=Decimal("120"))
+    db.add(product)
+    db.commit()
+
+    created = client.post("/api/admin/suppliers", headers=headers, json={
+        "nombre": "Proveedor asociado", "id_productos": [product.id_producto]
+    })
+
+    assert created.status_code == 201
+    assert created.json()["productos"] == [{"id_producto": product.id_producto, "nombre": "Camisa proveedor"}]
+    db.refresh(product)
+    assert product.id_proveedor == created.json()["id_proveedor"]
+
+
 def test_collection_crud_and_product_association(db) -> None:
     client = TestClient(app)
     headers = admin_headers(db)

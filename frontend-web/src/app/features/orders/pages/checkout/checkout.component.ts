@@ -101,7 +101,7 @@ export class CheckoutComponent implements OnInit {
       return { tipo_entrega: value.tipo_entrega, id_sucursal_entrega: value.id_sucursal_entrega };
     }
     if (value.direccion_entrega.trim().length < 3 || value.telefono_entrega.trim().length < 6) {
-      this.snackBar.open('Delivery requiere direcciÃ³n y telÃ©fono', 'Cerrar', { duration: 4000 });
+      this.snackBar.open('Delivery requiere dirección y teléfono', 'Cerrar', { duration: 4000 });
       return null;
     }
     return {

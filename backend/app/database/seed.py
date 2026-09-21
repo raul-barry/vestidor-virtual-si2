@@ -194,7 +194,8 @@ def _seed_catalog(db: Session) -> dict[str, int]:
             db.flush()
             created["productos"] += 1
 
-        asset_url = f"/api/assets/fitting/prenda-{product_index}.svg"
+        # Realistic raster catalog photo; keep the dedicated try-on resource below separate.
+        asset_url = f"/api/assets/catalog/catalog-prenda-{product_index}.png"
         resource = db.scalar(select(RecursoVirtual).where(
             RecursoVirtual.id_producto == product.id_producto, RecursoVirtual.url_archivo == asset_url))
         if resource is None:
@@ -202,8 +203,7 @@ def _seed_catalog(db: Session) -> dict[str, int]:
                                   url_archivo=asset_url, estado="ACTIVO"))
             created["recursos_virtuales"] += 1
 
-        # Keep the SVG illustration for the normal catalogue. The try-on
-        # pipeline receives a separate raster cutout.
+        # The try-on pipeline receives a separate raster cutout with its own framing.
         tryon_url = f"/api/assets/tryon/prenda-{product_index}.png"
         tryon_resource = db.scalar(select(RecursoVirtual).where(
             RecursoVirtual.id_producto == product.id_producto,

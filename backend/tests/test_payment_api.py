@@ -205,6 +205,7 @@ def test_stripe_create_intent_uses_order_total_without_real_charge(db, monkeypat
     monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_mock")
     monkeypatch.setattr(settings, "stripe_publishable_key", "pk_test_mock")
     monkeypatch.setattr(settings, "stripe_currency", "BOB")
+    monkeypatch.setattr(settings, "payment_simulation_mode", False)
     monkeypatch.setattr(stripe.PaymentIntent, "create", create_intent)
 
     response = client.post("/api/payments/stripe/create-intent", headers=headers, json={"id_pedido": order_id})
@@ -224,11 +225,44 @@ def test_stripe_create_intent_is_controlled_when_keys_are_missing(db, monkeypatc
     order_id = create_order_for_client(db, client, headers)
     monkeypatch.setattr(settings, "stripe_secret_key", "")
     monkeypatch.setattr(settings, "stripe_publishable_key", "")
+    monkeypatch.setattr(settings, "payment_simulation_mode", False)
 
     response = client.post("/api/payments/stripe/create-intent", headers=headers, json={"id_pedido": order_id})
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Stripe no est\u00e1 configurado actualmente."
+
+
+def test_demo_qr_generates_payload_and_can_be_accepted(db) -> None:
+    seed_roles(db)
+    db.commit()
+    client = TestClient(app)
+    headers = register_and_login(client, "qr-demo@example.com")
+    order_id = create_order_for_client(db, client, headers)
+
+    created = client.post("/api/payments/qr", headers=headers, json={"id_pedido": order_id, "metodo_pago": "QR"})
+
+    assert created.status_code == 200
+    assert created.json()["payment"]["estado"] == "PENDIENTE"
+    assert f"PEDIDO={order_id}" in created.json()["qr_payload"]
+    accepted = client.put(f"/api/payments/{created.json()['payment']['id_pago']}/approve", headers=headers)
+    assert accepted.json()["estado"] == "PAGADO"
+
+
+def test_demo_card_is_accepted_without_contacting_stripe(db) -> None:
+    seed_roles(db)
+    db.commit()
+    client = TestClient(app)
+    headers = register_and_login(client, "card-demo@example.com")
+    order_id = create_order_for_client(db, client, headers)
+
+    created = client.post("/api/payments/stripe/create-intent", headers=headers, json={"id_pedido": order_id})
+
+    assert created.status_code == 200
+    assert created.json()["simulation"] is True
+    assert created.json()["payment"]["referencia_externa"].startswith("pi_demo_")
+    accepted = client.put(f"/api/payments/{created.json()['payment']['id_pago']}/approve", headers=headers)
+    assert accepted.json()["estado"] == "PAGADO"
 
 
 def test_stripe_webhook_rejects_invalid_signature(db, monkeypatch) -> None:

@@ -26,7 +26,7 @@ class CreateOrderRequest(BaseModel):
                 raise ValueError("Seleccione una sucursal de recojo")
             return self
         if not self.direccion_entrega or not self.telefono_entrega:
-            raise ValueError("Delivery requiere direcciÃ³n y telÃ©fono")
+            raise ValueError("Delivery requiere dirección y teléfono")
         return self
 
 

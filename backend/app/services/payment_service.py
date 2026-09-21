@@ -123,6 +123,16 @@ class PaymentService:
             self.repository.db.rollback()
             raise AppException("No se pudo registrar el pago Stripe", status_code=500) from exc
 
+    def attach_demo_qr_reference(self, id_pago: int, reference: str) -> PaymentResponse:
+        """Marks the generic QR as a demo-only Stripe transaction reference."""
+        payment = self.repository.get_payment_by_id(id_pago)
+        if payment is None:
+            raise AppException("Pago no encontrado", status_code=404)
+        payment.proveedor = "STRIPE_SIMULADO"
+        payment.referencia_externa = reference
+        self.repository.db.commit()
+        return self._to_response(payment)
+
     def _get_approvable_payment(self, id_pago: int, *, allow_retry_from_failed: bool = False) -> Pago:
         payment = self.repository.get_payment_by_id(id_pago)
         if payment is None:

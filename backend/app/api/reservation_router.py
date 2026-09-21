@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,11 +35,18 @@ def present(db, item):
 
 
 @reservation_router.get("/availability")
-def availability(db: Session = Depends(get_db), user: Usuario = Depends(allowed)):
+def availability(
+    id_variante: int | None = Query(default=None, gt=0),
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(allowed),
+):
+    query = select(Inventario).order_by(Inventario.id_inventario)
+    if id_variante is not None:
+        query = query.where(Inventario.id_variante == id_variante)
     return [dict(id_inventario=i.id_inventario, producto=i.variante.producto.nombre,
-                 talla=i.variante.talla.nombre, color=i.variante.color.nombre,
+                 id_variante=i.id_variante, talla=i.variante.talla.nombre, color=i.variante.color.nombre,
                  sucursal=i.sucursal.nombre, disponible=i.stock_disponible)
-            for i in db.scalars(select(Inventario).order_by(Inventario.id_inventario)).all()
+            for i in db.scalars(query).all()
             if i.stock_disponible > 0 and i.variante.estado == "ACTIVO"
             and i.variante.producto.estado == "ACTIVO" and i.sucursal.estado == "ACTIVA"]
 

@@ -15,7 +15,7 @@ describe('PaymentComponent', () => {
   let snackBar: jasmine.SpyObj<MatSnackBar>;
 
   beforeEach(async () => {
-    paymentService = jasmine.createSpyObj<PaymentService>('PaymentService', ['getPaymentByOrder', 'createPayment', 'createStripeIntent', 'createQrPayment', 'getPaymentStatus']);
+    paymentService = jasmine.createSpyObj<PaymentService>('PaymentService', ['getPaymentByOrder', 'createPayment', 'createStripeIntent', 'createQrPayment', 'confirmQrPayment', 'getPaymentStatus', 'approvePayment']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
     const orderService = jasmine.createSpyObj<OrderService>('OrderService', ['getOrderDetail']);
     orderService.getOrderDetail.and.returnValue(of({ id_pedido: 1, estado: 'PENDIENTE', total: '500.00', detalles: [] }));

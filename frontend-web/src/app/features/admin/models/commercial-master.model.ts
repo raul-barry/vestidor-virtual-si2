@@ -9,9 +9,11 @@ export interface Supplier {
   correo: string;
   direccion: string;
   estado: LogicalState;
+  productos: SupplierProduct[];
 }
 
-export type SupplierRequest = Omit<Supplier, 'id_proveedor'>;
+export interface SupplierProduct { id_producto: number; nombre: string; }
+export interface SupplierRequest extends Omit<Supplier, 'id_proveedor' | 'productos'> { id_productos: number[]; }
 
 export interface Collection {
   id_coleccion: number;
@@ -30,4 +32,5 @@ export interface CollectionProduct {
   id_producto: number;
   nombre: string;
   id_coleccion: number | null;
+  id_proveedor?: number | null;
 }

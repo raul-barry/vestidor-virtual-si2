@@ -14,6 +14,7 @@ from app.schemas.auth import (
     LogoutResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
+    PasswordResetTokenRequest,
     PasswordResetResponse,
     RegisterRequest,
     RegisterResponse,
@@ -95,8 +96,18 @@ def request_password_reset(
     token = AuthService(db).request_password_reset(request)
     return PasswordResetResponse(
         message="Solicitud de recuperación generada correctamente",
-        token=token if settings.expose_reset_token and settings.environment in ("development", "test") else None,
+        token=token if settings.expose_reset_token and settings.environment in ("development", "test") and not settings.smtp_configured else None,
     )
+
+
+@auth_router.post(
+    "/validate-password-reset",
+    response_model=PasswordResetResponse,
+    responses={400: {"description": "Token de recuperación inválido o expirado"}},
+)
+def validate_password_reset(request: PasswordResetTokenRequest, db: Session = Depends(get_db)) -> PasswordResetResponse:
+    AuthService(db).validate_password_reset_token(request.token)
+    return PasswordResetResponse(message="Token de recuperación válido")
 
 
 @auth_router.post(

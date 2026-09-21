@@ -1,11 +1,11 @@
 """Payment provider adapters.
 
-Stripe is the only card provider implemented here.  QR deliberately remains an
-explicitly unconfigured provider until a real bank/acquirer integration is
-available; the API never fabricates a QR code or marks a payment as paid.
+Stripe handles real card payments. QR is a Stripe-labelled demo flow: it
+creates no real bank transfer and must never be enabled as a real provider.
 """
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+from uuid import uuid4
 
 from app.core.config import settings
 
@@ -50,12 +50,36 @@ class StripeCardPaymentProvider:
         return {"id": intent.id, "client_secret": intent.client_secret, "status": intent.status}
 
 
-class QRPaymentProvider:
-    configured = False
+class SimulatedStripeCardPaymentProvider:
+    """Stripe-shaped adapter used only by the local/demo payment flow."""
 
-    @classmethod
-    def unavailable_message(cls) -> str:
-        return "Pago QR no configurado actualmente."
+    @staticmethod
+    def create_intent(amount: Decimal, id_pedido: int) -> dict[str, Any]:
+        reference = f"pi_demo_{uuid4().hex}"
+        return {
+            "id": reference,
+            "client_secret": f"{reference}_secret_demo",
+            "status": "requires_payment_method",
+        }
+
+    @staticmethod
+    def retrieve_intent(reference: str) -> dict[str, Any]:
+        return {
+            "id": reference,
+            "client_secret": f"{reference}_secret_demo",
+            "status": "requires_payment_method",
+        }
+
+
+class QRPaymentProvider:
+    @staticmethod
+    def create_demo_request(id_pedido: int, amount: Decimal, currency: str) -> dict[str, str]:
+        # Deliberately a generic demo payload, not a bank transfer QR.
+        reference = f"qr_stripe_demo_{uuid4().hex}"
+        return {
+            "reference": reference,
+            "payload": f"STRIPE-DEMO-QR|REF={reference}|PEDIDO={id_pedido}|MONTO={amount:.2f}|MONEDA={currency.upper()}",
+        }
 
 
 class CashPaymentProvider:

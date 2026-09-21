@@ -9,10 +9,16 @@ from app.schemas.payment import (
     CreatePaymentRequest,
     PaymentResponse,
     PaymentStatusResponse,
+    QRPaymentResponse,
     StripeIntentRequest,
     StripeIntentResponse,
 )
-from app.services.payment_providers import PaymentProviderError, QRPaymentProvider, StripeCardPaymentProvider
+from app.services.payment_providers import (
+    PaymentProviderError,
+    QRPaymentProvider,
+    SimulatedStripeCardPaymentProvider,
+    StripeCardPaymentProvider,
+)
 from app.services.payment_service import PaymentService
 
 payment_router = APIRouter(prefix="/payments", tags=["Pagos"])
@@ -67,8 +73,9 @@ def create_stripe_intent(
         raise HTTPException(404, "Pedido no encontrado")
     service._ensure_order_owner(order, id_cliente)
     existing = service.repository.get_payment_by_order(request.id_pedido)
+    simulation = settings.payment_simulation_mode
     try:
-        provider = StripeCardPaymentProvider()
+        provider = SimulatedStripeCardPaymentProvider() if simulation else StripeCardPaymentProvider()
         intent = (
             provider.retrieve_intent(existing.referencia_externa)
             if existing and existing.estado == "PENDIENTE" and existing.proveedor == "STRIPE" and existing.referencia_externa
@@ -81,6 +88,7 @@ def create_stripe_intent(
         client_secret=intent["client_secret"],
         publishable_key=settings.stripe_publishable_key,
         payment=payment,
+        simulation=simulation,
     )
 
 
@@ -96,16 +104,37 @@ def payment_status(
     return PaymentStatusResponse(payment=payment, order_status=order.estado)
 
 
-@payment_router.post("/qr", response_model=PaymentResponse)
+@payment_router.post("/qr", response_model=QRPaymentResponse)
 def create_qr_payment(
     request: CreatePaymentRequest,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(require_roles("CLIENTE")),
-) -> PaymentResponse:
-    if not QRPaymentProvider.configured:
-        raise HTTPException(503, QRPaymentProvider.unavailable_message())
+) -> QRPaymentResponse:
     service, id_cliente = get_payment_service_for_user(db, current_user)
-    return service.create_payment(request, id_cliente)
+    payment = service.create_payment(request, id_cliente)
+    qr_request = QRPaymentProvider.create_demo_request(payment.id_pedido, payment.monto, settings.stripe_currency)
+    payment = service.attach_demo_qr_reference(payment.id_pago, qr_request["reference"])
+    return QRPaymentResponse(
+        payment=payment,
+        qr_payload=qr_request["payload"],
+        provider_reference=qr_request["reference"],
+    )
+
+
+@payment_router.post("/qr/{id_pago}/confirm", response_model=PaymentResponse)
+def confirm_demo_qr_payment(
+    id_pago: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+) -> PaymentResponse:
+    """Accept a scan in the QR demo. Real QR confirmation belongs to the bank."""
+    if settings.environment not in ("development", "test") or not settings.payment_simulation_mode:
+        raise HTTPException(403, "Simulación de pagos QR deshabilitada")
+    service, id_cliente = get_payment_service_for_user(db, current_user)
+    payment = service.repository.get_payment_by_id(id_pago)
+    if payment is None or payment.metodo_pago != "QR" or payment.proveedor != "STRIPE_SIMULADO":
+        raise HTTPException(404, "Pago QR de demostración no encontrado")
+    return service.approve_payment(id_pago, id_cliente)
 
 
 @payment_router.post("/stripe/webhook")
