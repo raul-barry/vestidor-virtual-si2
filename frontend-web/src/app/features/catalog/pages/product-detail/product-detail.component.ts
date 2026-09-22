@@ -104,17 +104,37 @@ export class ProductDetailComponent implements OnInit {
       return;
     }
 
+    if (!this.hasSession()) {
+      this.snackBar.open('Inicia sesión como cliente para agregar productos al carrito', 'Iniciar sesión', { duration: 5000 })
+        .onAction()
+        .subscribe(() => {
+          void this.router.navigate(['/login']);
+        });
+      return;
+    }
+
     this.isAddingToCart = true;
     this.cartService.addItem(this.selectedVariant.id_variante, 1).subscribe({
       next: () => {
         this.isAddingToCart = false;
         this.snackBar.open('Producto agregado al carrito', 'Cerrar', { duration: 3000 });
       },
-      error: (error: { error?: { message?: string } }) => {
+      error: (error: { status?: number; error?: { message?: string; detail?: string } }) => {
         this.isAddingToCart = false;
-        this.snackBar.open(error.error?.message ?? 'No fue posible agregar el producto', 'Cerrar', {
-          duration: 5000
-        });
+        if (error.status === 401) {
+          this.snackBar.open('Sesión expirada. Por favor, inicia sesión nuevamente', 'Iniciar sesión', { duration: 5000 })
+            .onAction()
+            .subscribe(() => {
+              void this.router.navigate(['/login']);
+            });
+          return;
+        }
+        if (error.status === 403) {
+          this.snackBar.open('Debes iniciar sesión con una cuenta de Cliente para usar el carrito', 'Cerrar', { duration: 5000 });
+          return;
+        }
+        const errorMsg = error.error?.detail ?? error.error?.message ?? 'No fue posible agregar el producto';
+        this.snackBar.open(errorMsg, 'Cerrar', { duration: 5000 });
       }
     });
   }
