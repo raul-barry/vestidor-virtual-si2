@@ -9,8 +9,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from io import BytesIO
 from pathlib import Path
+import base64
+import mimetypes
+
+import httpx
 
 from PIL import Image, ImageChops, ImageOps
+
+from app.core.config import settings
 
 try:  # Optional: the deployed dependency improves positioning, never blocks Pillow fallback.
     import cv2
@@ -22,7 +28,11 @@ except ImportError:  # pragma: no cover - exercised by environments without Open
 
 class VirtualTryOnProvider(ABC):
     @abstractmethod
-    def render(self, person: bytes, garment_path: Path) -> bytes: ...
+    def render(self, person: bytes, garment_path: Path, person_mime: str = "image/jpeg") -> bytes: ...
+
+
+class GeminiTryOnError(RuntimeError):
+    """The image-editing provider could not return a usable image."""
 
 
 class LocalTryOnProvider(VirtualTryOnProvider):
@@ -72,7 +82,7 @@ class LocalTryOnProvider(VirtualTryOnProvider):
         garment.putalpha(ImageChops.subtract(alpha, background))
         return garment
 
-    def render(self, person: bytes, garment_path: Path) -> bytes:
+    def render(self, person: bytes, garment_path: Path, person_mime: str = "image/jpeg") -> bytes:
         with Image.open(BytesIO(person)) as source, Image.open(garment_path) as garment_source:
             base = ImageOps.exif_transpose(source).convert("RGBA")
             garment = ImageOps.exif_transpose(garment_source).convert("RGBA")
@@ -94,16 +104,68 @@ class LocalTryOnProvider(VirtualTryOnProvider):
             return output.getvalue()
 
 
+class GeminiVirtualTryOnProvider(VirtualTryOnProvider):
+    """Use Gemini's image model to replace clothing in a customer photo."""
+
+    _endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+    @staticmethod
+    def _inline_image(data: bytes, mime_type: str) -> dict[str, object]:
+        return {"inlineData": {"mimeType": mime_type, "data": base64.b64encode(data).decode("ascii")}}
+
+    def render(self, person: bytes, garment_path: Path, person_mime: str = "image/jpeg") -> bytes:
+        garment = garment_path.read_bytes()
+        garment_mime = mimetypes.guess_type(garment_path.name)[0] or "image/png"
+        prompt = (
+            "Edit the first image into a photorealistic virtual try-on. The first image is the customer "
+            "and the second image is the exact garment to wear. Replace only the customer's visible clothing "
+            "with that garment. Fit it naturally to the person's body, shoulders, pose and perspective; "
+            "preserve the face, body proportions, skin, hair, hands, background and lighting. Keep the garment's "
+            "color, pattern, material, logos and details. Do not create a mannequin, collage, split screen, "
+            "text or extra people. Return only the edited image."
+        )
+        body = {
+            "contents": [{"parts": [
+                {"text": prompt},
+                self._inline_image(person, person_mime),
+                self._inline_image(garment, garment_mime),
+            ]}],
+            "generationConfig": {"responseModalities": ["IMAGE"]},
+        }
+        url = self._endpoint.format(model=settings.gemini_model)
+        try:
+            with httpx.Client(timeout=90.0) as client:
+                response = client.post(
+                    url,
+                    headers={"x-goog-api-key": settings.gemini_api_key},
+                    json=body,
+                )
+        except httpx.HTTPError as exc:
+            raise GeminiTryOnError("No fue posible conectar con Gemini") from exc
+        if response.status_code >= 400:
+            raise GeminiTryOnError(f"Gemini rechazó la edición ({response.status_code})")
+        try:
+            payload = response.json()
+            parts = payload["candidates"][0]["content"]["parts"]
+            image_part = next(part for part in parts if "inlineData" in part or "inline_data" in part)
+            image_data = image_part.get("inlineData") or image_part.get("inline_data")
+            return base64.b64decode(image_data["data"])
+        except (KeyError, IndexError, StopIteration, TypeError, ValueError, base64.binascii.Error) as exc:
+            raise GeminiTryOnError("Gemini no devolvió una imagen editada") from exc
+
+
 class ExternalVirtualTryOnProvider(VirtualTryOnProvider):
     """Reserved adapter boundary for FASHN/Replicate; no key is embedded here."""
 
-    def render(self, person: bytes, garment_path: Path) -> bytes:
+    def render(self, person: bytes, garment_path: Path, person_mime: str = "image/jpeg") -> bytes:
         raise NotImplementedError("El proveedor externo de vestidor virtual no está configurado")
 
 
 class VirtualTryOnService:
     def __init__(self, provider: VirtualTryOnProvider | None = None) -> None:
-        self.provider = provider or LocalTryOnProvider()
+        self.provider = provider or (
+            GeminiVirtualTryOnProvider() if settings.gemini_api_key.strip() else LocalTryOnProvider()
+        )
 
-    def render(self, person: bytes, garment_path: Path) -> bytes:
-        return self.provider.render(person, garment_path)
+    def render(self, person: bytes, garment_path: Path, person_mime: str = "image/jpeg") -> bytes:
+        return self.provider.render(person, garment_path, person_mime)

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # and local development, where each selected payment method can be accepted.
     payment_simulation_mode: bool = True
     fashn_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.1-flash-image"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

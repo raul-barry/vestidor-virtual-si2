@@ -27,7 +27,7 @@ from app.services.pricing_service import current_price
 from app.models.producto import Producto
 from app.models.recurso_virtual import RecursoVirtual
 from app.schemas.virtual_try_on import VirtualTryOnResponse
-from app.services.virtual_try_on_service import VirtualTryOnService
+from app.services.virtual_try_on_service import GeminiTryOnError, VirtualTryOnService
 
 experience_router = APIRouter(prefix="/experience", tags=["Recomendaciones, vestidor y seguridad"])
 
@@ -106,7 +106,7 @@ async def virtual_try_on_photo(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user),
 ) -> VirtualTryOnResponse:
-    """Render an ephemeral, local photo try-on using a real catalogue image."""
+    """Render an ephemeral photo try-on using Gemini when configured."""
     if photo.content_type not in _PHOTO_TYPES:
         raise HTTPException(422, "Formato no permitido. Usa JPG, PNG o WebP")
     try:
@@ -156,7 +156,9 @@ async def virtual_try_on_photo(
     if garment_path is None:
         raise HTTPException(422, "No existe una imagen compatible con el vestidor virtual.")
     try:
-        result = VirtualTryOnService().render(payload, garment_path)
+        result = VirtualTryOnService().render(payload, garment_path, photo.content_type)
+    except GeminiTryOnError as exc:
+        raise HTTPException(502, str(exc)) from exc
     except (UnidentifiedImageError, OSError, ValueError):
         raise HTTPException(422, "No existe una imagen compatible con el vestidor virtual.")
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Vestidor fotográfico: producto {product_id}"))
