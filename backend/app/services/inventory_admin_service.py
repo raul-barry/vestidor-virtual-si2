@@ -82,6 +82,7 @@ class InventoryAdminService:
                 cantidad=movement.cantidad,
                 stock_anterior=movement.stock_anterior,
                 stock_nuevo=movement.stock_nuevo,
+                motivo=movement.motivo,
                 fecha=movement.fecha_movimiento,
                 usuario=f"{movement.usuario.nombres} {movement.usuario.apellidos}",
             )
@@ -157,5 +158,9 @@ class InventoryAdminService:
             color=inventory.variante.color.nombre,
             sucursal=inventory.sucursal.nombre,
             stock=inventory.stock_disponible,
+            stock_disponible=inventory.stock_disponible,
+            stock_reservado=inventory.stock_reservado,
+            stock_vendido=inventory.stock_vendido,
+            stock_total=inventory.stock_disponible + inventory.stock_reservado + inventory.stock_vendido,
             stock_bajo=inventory.stock_disponible < 5,
         )

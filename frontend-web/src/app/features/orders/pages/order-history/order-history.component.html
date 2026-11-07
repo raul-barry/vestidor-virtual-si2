@@ -6,9 +6,25 @@
 
   @if (isLoading) {
     <div class="loading-state"><mat-spinner diameter="42"></mat-spinner><span>Cargando pedidos...</span></div>
-  } @else if (orders.length === 0) {
+  } @else if (orders.length === 0 && offlineOrders.length === 0) {
     <mat-card class="empty-state">Aún no tienes pedidos registrados.</mat-card>
   } @else {
+    @if (offlineOrders.length) {
+      <section class="orders-list" aria-label="Ventas offline">
+        <h2>Ventas offline</h2>
+        <button mat-button type="button" (click)="syncPending()">Sincronizar pendientes</button>
+        @for (order of offlineOrders; track order.local_operation_uuid) {
+          <mat-card class="offline-order-card"><mat-card-content>
+            <h3>Comprobante {{ order.id_pedido ? '#' + order.id_pedido : 'local ' + order.numero_local }}</h3>
+            <p>{{ order.mensaje_sync }} · Pago {{ order.estado_pago }}</p>
+            <p>Total provisional/confirmado: {{ order.total }}</p>
+            @for (line of order.detalles; track line['client_line_id']) {
+              <div>{{ line['producto'] }} × {{ line['cantidad'] }} · {{ line['estado_sync'] }} {{ line['motivo_rechazo'] ?? '' }}</div>
+            }
+          </mat-card-content></mat-card>
+        }
+      </section>
+    }
     <section class="orders-list">
       @for (order of orders; track order.id_pedido) {
         <app-order-card [order]="order" (viewDetail)="viewOrderDetail($event)" />

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.security import bearer_scheme
+from app.core.tenancy import select_public_organization
 from fastapi.security import HTTPAuthorizationCredentials
 from app.database.database import get_db
 from app.models.usuario import Usuario
@@ -33,8 +34,10 @@ auth_router = APIRouter(prefix="/auth", tags=["Autenticacion"])
         500: {"description": "El rol CLIENTE no está configurado o el registro falló"},
     },
 )
-def register_client(request: RegisterRequest, db: Session = Depends(get_db)) -> RegisterResponse:
-    usuario = AuthService(db).register_client(request)
+def register_client(request: RegisterRequest, organization_slug: str | None = Query(default=None), db: Session = Depends(get_db)) -> RegisterResponse:
+    organization = select_public_organization(db, organization_slug)
+    db.info["organization_id"] = organization.id_organizacion
+    usuario = AuthService(db).register_client(request, organization.id_organizacion)
     return RegisterResponse(
         id_usuario=usuario.id_usuario,
         nombres=usuario.nombres,

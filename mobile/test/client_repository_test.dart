@@ -15,12 +15,45 @@ void main() {
       return http.Response('[]', 200);
     }));
     final repo = ClientRepository(api);
-    await repo.catalog();
+    await repo.catalog(const {}, 'fashionstore');
     await repo
-        .catalog({'nombre': 'Camisa azul', 'color': '', 'precio_max': '200'});
+        .catalog({'nombre': 'Camisa azul', 'color': '', 'precio_max': '200'}, 'fashionstore');
     expect(requests[0].path, '/api/catalog/products');
-    expect(requests[1].queryParameters,
-        {'nombre': 'Camisa azul', 'precio_max': '200'});
+    expect(requests[0].queryParameters, {'organization_slug': 'fashionstore'});
+    expect(requests[1].queryParameters, {
+      'organization_slug': 'fashionstore',
+      'nombre': 'Camisa azul',
+      'precio_max': '200'
+    });
+    api.dispose();
+  });
+  test('public variants and availability use the selected slug', () async {
+    final requests = <Uri>[];
+    final api = ApiClient(client: MockClient((r) async {
+      requests.add(r.url);
+      return http.Response('{"disponibilidad":[]}', 200);
+    }));
+    final repo = ClientRepository(api);
+    await repo.variants(4, organizationSlug: 'urbanvogue');
+    await repo.availability(4, organizationSlug: 'urbanvogue');
+    expect(requests.map((uri) => uri.queryParameters), everyElement({'organization_slug': 'urbanvogue'}));
+    api.dispose();
+  });
+  test('public catalog requires an explicit valid slug', () async {
+    final api = ApiClient(client: MockClient((r) async => http.Response('[]', 200)));
+    await expectLater(ClientRepository(api).catalog(), throwsA(isA<ApiException>()));
+    await expectLater(ClientRepository(api).catalog(const {}, 'bad slug'), throwsA(isA<ApiException>()));
+    api.dispose();
+  });
+  test('authenticated catalog never accepts an arbitrary public slug', () async {
+    final requests = <Uri>[];
+    final api = ApiClient(client: MockClient((r) async {
+      requests.add(r.url);
+      return http.Response('[]', 200);
+    }));
+    api.token = 'jwt';
+    await ClientRepository(api).catalog(const {}, 'elegance-boutique');
+    expect(requests.single.queryParameters, isEmpty);
     api.dispose();
   });
   for (final state in ['PENDIENTE', 'PAGADO']) {

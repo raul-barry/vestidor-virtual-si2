@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.usuario import Usuario
+from app.models.organizacion import Organizacion
 from app.repositories.usuario_repository import UsuarioRepository
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -57,6 +58,7 @@ def get_current_user(
 
     payload = verify_token(credentials.credentials)
     user_id = payload.get("id_usuario") if payload else None
+    organization_id = payload.get("id_organizacion") if payload else None
     if not isinstance(user_id, int):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -71,6 +73,20 @@ def get_current_user(
             detail="Token inválido",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    is_platform_admin = usuario.rol.nombre == "ADMINISTRADOR_PLATAFORMA"
+    if is_platform_admin and (usuario.id_organizacion is not None or organization_id is not None):
+        raise HTTPException(status_code=401, detail="Global platform context required")
+    if not is_platform_admin and (not isinstance(organization_id, int) or usuario.id_organizacion != organization_id):
+        raise HTTPException(status_code=401, detail="La organización de la sesión ya no es válida")
+    organization = db.get(Organizacion, organization_id) if organization_id is not None else None
+    if not is_platform_admin and (organization is None or organization.estado.upper() != "ACTIVA"):
+        raise HTTPException(status_code=403, detail="Organización inactiva")
+    if is_platform_admin:
+        db.info.pop("organization_id", None)
+    else:
+        db.info["organization_id"] = organization_id
+    db.info["audit_actor_id"] = usuario.id_usuario
+    db.info["audit_actor_role"] = usuario.rol.nombre
     if usuario.estado.upper() != "ACTIVO":
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     if getattr(usuario.rol, "estado", "ACTIVO").upper() != "ACTIVO":
@@ -87,6 +103,15 @@ def get_current_user(
     return usuario
 
 
+def get_optional_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Usuario | None:
+    if credentials is None:
+        return None
+    return get_current_user(credentials, db)
+
+
 def require_roles(*allowed_roles: str):
     def role_checker(current_user: Usuario = Depends(get_current_user)) -> Usuario:
         if current_user.rol.nombre not in allowed_roles:
@@ -99,6 +124,12 @@ def require_roles(*allowed_roles: str):
 def get_current_admin(current_user: Usuario = Depends(get_current_user)) -> Usuario:
     if current_user.rol.nombre != "ADMINISTRADOR":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+    return current_user
+
+
+def get_current_platform_admin(current_user: Usuario = Depends(get_current_user)) -> Usuario:
+    if current_user.rol.nombre != "ADMINISTRADOR_PLATAFORMA":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos de plataforma insuficientes")
     return current_user
 
 

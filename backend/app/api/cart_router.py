@@ -35,7 +35,7 @@ def add_item(
     current_user: Usuario = Depends(require_roles("CLIENTE")),
 ) -> CartResponse:
     service, id_cliente = get_cart_service_for_user(db, current_user)
-    return service.add_item(id_cliente, request.id_variante, request.cantidad)
+    return service.add_item(id_cliente, request.id_variante, request.cantidad, request.id_reserva)
 
 
 @cart_router.put(

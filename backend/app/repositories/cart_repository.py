@@ -70,13 +70,15 @@ class CartRepository:
         return self.db.get(CarritoDetalle, id_detalle)
 
     def add_item(
-        self, id_carrito: int, id_variante: int, cantidad: int, precio_unitario: Decimal
+        self, id_carrito: int, id_variante: int, cantidad: int, precio_unitario: Decimal,
+        id_reserva: int | None = None
     ) -> CarritoDetalle:
         item = CarritoDetalle(
             id_carrito=id_carrito,
             id_variante=id_variante,
             cantidad=cantidad,
             precio_unitario=precio_unitario,
+            id_reserva=id_reserva,
         )
         self.db.add(item)
         self.db.flush()

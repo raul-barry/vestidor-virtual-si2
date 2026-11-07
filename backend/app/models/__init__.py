@@ -23,6 +23,15 @@ from app.models.usuario import Usuario
 from app.models.organizacion import Organizacion
 from app.models.perfil_corporal import PerfilCorporal
 from app.models.preferencia_cliente import PreferenciaCliente, PreferenciaClienteColor
+from app.models.plan import Plan, PlanCaracteristica
+from app.models.suscripcion import Suscripcion
+from app.models.audit_log import AuditLog
+from app.models.sync_idempotency import SyncIdempotency
+from app.models.device_sync_credential import DeviceSyncCredential
+from app.models.exchange import GarmentExchange, ExchangeInventoryIncident, OrganizationHoliday
+from app.models.payment_refund import PaymentRefund
+from app.models.payment_adjustment import PaymentAdjustment
+from app.models.platform_ai_config import PlatformAIConfig, PlatformAIConfigAudit
 
 __all__ = [
     "Base",
@@ -48,6 +57,19 @@ __all__ = [
     "TokenRecuperacion",
     "Usuario",
     "Organizacion",
+    "Plan",
+    "PlanCaracteristica",
+    "Suscripcion",
+    "AuditLog",
+    "SyncIdempotency",
+    "DeviceSyncCredential",
+    "GarmentExchange",
+    "ExchangeInventoryIncident",
+    "OrganizationHoliday",
+    "PaymentRefund",
+    "PaymentAdjustment",
+    "PlatformAIConfig",
+    "PlatformAIConfigAudit",
     "PerfilCorporal",
 ]
 

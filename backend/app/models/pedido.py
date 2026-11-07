@@ -16,6 +16,7 @@ class Pedido(Base):
     fecha_pedido: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
+    fecha_entrega: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     estado: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDIENTE")
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     tipo_cliente: Mapped[str] = mapped_column(String(30), nullable=False, default="CLIENTE_REGISTRADO")

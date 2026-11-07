@@ -10,6 +10,7 @@ class Usuario(Base):
     __tablename__ = "usuario"
 
     id_usuario: Mapped[int] = mapped_column(primary_key=True)
+    id_organizacion: Mapped[int | None] = mapped_column(ForeignKey("organizacion.id_organizacion"), nullable=True, index=True)
     id_sucursal: Mapped[int | None] = mapped_column(ForeignKey("sucursal.id_sucursal"))
     id_rol: Mapped[int] = mapped_column(ForeignKey("rol.id_rol"), nullable=False, index=True)
     nombres: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -28,3 +29,4 @@ class Usuario(Base):
     tokens_recuperacion: Mapped[list["TokenRecuperacion"]] = relationship(back_populates="usuario")
     bitacoras: Mapped[list["Bitacora"]] = relationship(back_populates="usuario")
     sucursal: Mapped["Sucursal | None"] = relationship()
+    organizacion: Mapped["Organizacion"] = relationship(back_populates="usuarios")

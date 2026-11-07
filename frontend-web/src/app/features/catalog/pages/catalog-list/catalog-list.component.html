@@ -1,4 +1,24 @@
 <main class="catalog-page">
+  @if (!hasSession()) {
+    <mat-card class="filter-panel">
+      <form (submit)="setOrganizationSlug($event)">
+        <label for="organization-slug">Tienda</label>
+        <input id="organization-slug" name="organization_slug" [value]="organizationSlug"
+          (input)="organizationSlug = $any($event.target).value" autocomplete="off"
+          placeholder="Ejemplo: urbanvogue" />
+        <button mat-flat-button color="primary" type="submit">Abrir tienda</button>
+      </form>
+      <p>Usa el enlace de tu tienda o ingresa su slug para ver el catálogo.</p>
+    </mat-card>
+  }
+  @if (!hasCatalogContext) {
+    <mat-card class="empty-state">Selecciona una tienda para consultar su catálogo. No se cargará una tienda predeterminada.</mat-card>
+  } @else {
+  <mat-card class="filter-panel" role="status">
+    <strong>{{ online ? 'Con conexión' : 'Modo offline' }}</strong>
+    @if (lastSync) { <span> · Última sincronización: {{ lastSync | date:'short' }}</span> }
+    @if (!online) { <p>La disponibilidad corresponde a la última información descargada.</p> }
+  </mat-card>
   <header class="catalog-header">
     <div>
       <p class="eyebrow">TU ESTILO, A TU MEDIDA</p>
@@ -33,4 +53,5 @@
     </section>
   }
   @if (hasSession()) {<app-recommendations-section />}
+  }
 </main>

@@ -110,3 +110,5 @@ def test_product_availability_endpoint_is_documented_in_openapi() -> None:
 
     assert "200" in operation["responses"]
     assert "404" in operation["responses"]
+    slug = next(parameter for parameter in operation["parameters"] if parameter["name"] == "organization_slug")
+    assert slug["in"] == "query" and slug["required"] is False

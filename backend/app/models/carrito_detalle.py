@@ -15,6 +15,7 @@ class CarritoDetalle(Base):
     id_variante: Mapped[int] = mapped_column(
         ForeignKey("producto_variante.id_variante"), nullable=False, index=True
     )
+    id_reserva: Mapped[int | None] = mapped_column(ForeignKey("reserva.id_reserva"), nullable=True, index=True)
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
     precio_unitario: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 

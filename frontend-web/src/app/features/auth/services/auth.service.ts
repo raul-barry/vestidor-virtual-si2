@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
-import { Observable, finalize, tap } from 'rxjs';
+import { Observable, finalize, tap, throwError } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { TokenService } from '../../../core/services/token.service';
 import { Usuario } from '../../../shared/models/usuario.model';
+import { PublicOrganizationContextService } from '../../catalog/services/public-organization-context.service';
 
 export interface RegisterRequest {
   nombres: string;
@@ -38,11 +39,14 @@ interface MessageResponse {
 export class AuthService {
   constructor(
     private readonly api: ApiService,
-    private readonly tokenService: TokenService
+    private readonly tokenService: TokenService,
+    private readonly organizationContext: PublicOrganizationContextService
   ) {}
 
   register(request: RegisterRequest): Observable<Usuario> {
-    return this.api.post<Usuario>('/api/auth/register', request);
+    const slug = this.organizationContext.publicSlug;
+    if (!slug) return throwError(() => new Error('Selecciona una tienda antes de crear una cuenta.'));
+    return this.api.post<Usuario>(`/api/auth/register?organization_slug=${encodeURIComponent(slug)}`, request);
   }
 
   login(request: LoginRequest): Observable<LoginResponse> {
@@ -72,6 +76,10 @@ export class AuthService {
 
   hasSession(): boolean {
     return this.tokenService.hasToken();
+  }
+
+  get organizationId(): number | null {
+    return this.tokenService.getOrganizationId();
   }
 
   clearSession(): void {

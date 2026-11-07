@@ -76,16 +76,19 @@ def test_admin_can_change_another_users_role(db) -> None:
     headers, _ = admin_headers(db)
     customer = create_user(db, "CLIENTE", "cliente@example.com")
     cashier = get_or_create_role(db, "CAJERO")
+    branch = Sucursal(nombre="Sucursal Caja", direccion="Av. Caja", estado="ACTIVA")
+    db.add(branch)
     db.commit()
 
     response = TestClient(app).put(
         f"/api/admin/users/{customer.id_usuario}/role",
         headers=headers,
-        json={"id_rol": cashier.id_rol},
+        json={"id_rol": cashier.id_rol, "id_sucursal": branch.id_sucursal},
     )
 
     assert response.status_code == 200
     assert response.json()["rol"] == "CAJERO"
+    assert response.json()["id_sucursal"] == branch.id_sucursal
 
 
 def test_cannot_deactivate_last_administrator_or_change_current_admin_role(db) -> None:
@@ -164,3 +167,58 @@ def test_admin_completes_create_edit_branch_deactivate_and_restore_flow(db) -> N
     )
     assert disabled.status_code == 200 and disabled.json()["estado"] == "INACTIVO"
     assert restored.status_code == 200 and restored.json()["estado"] == "ACTIVO"
+
+
+def test_create_branch_manager_requires_and_receives_same_tenant_branch(db) -> None:
+    headers, admin = admin_headers(db)
+    manager = get_or_create_role(db, "ENCARGADO_SUCURSAL")
+    branch = Sucursal(nombre="Sucursal Encargado", direccion="Av. Principal", estado="ACTIVA")
+    db.add(branch)
+    db.commit()
+    client = TestClient(app)
+    payload = {"nombres":"Ana", "apellidos":"Encargada", "correo":"ana.encargada@example.com",
+               "password":"Seguro123!", "rol":manager.nombre}
+
+    missing_branch = client.post("/api/admin/users", headers=headers, json=payload)
+    assert missing_branch.status_code == 422
+
+    created = client.post("/api/admin/users", headers=headers, json={**payload, "id_sucursal":branch.id_sucursal})
+    assert created.status_code == 201, created.text
+    assert created.json()["rol"] == "ENCARGADO_SUCURSAL"
+    assert created.json()["id_sucursal"] == branch.id_sucursal
+    assert db.get(Usuario, created.json()["id_usuario"]).id_organizacion == admin.id_organizacion
+
+
+def test_company_admin_cannot_assign_foreign_branch_or_custom_global_role(db) -> None:
+    headers, _ = admin_headers(db)
+    manager = get_or_create_role(db, "ENCARGADO_SUCURSAL")
+    custom = get_or_create_role(db, "CUSTOM_GLOBAL_ROLE")
+    db.flush()
+    db.info.pop("organization_id", None)
+    from app.models.organizacion import Organizacion
+    foreign_org = Organizacion(id_organizacion=2, nombre="Otra empresa", slug="otra-empresa", estado="ACTIVA")
+    db.add(foreign_org)
+    db.flush()
+    foreign_branch = Sucursal(id_organizacion=2, nombre="Sucursal Externa", direccion="Otra dirección", estado="ACTIVA")
+    db.add(foreign_branch)
+    db.commit()
+    db.info["organization_id"] = 1
+    client = TestClient(app)
+    payload = {"nombres":"Luis", "apellidos":"Prueba", "correo":"luis.prueba@example.com",
+               "password":"Seguro123!", "rol":manager.nombre, "id_sucursal":foreign_branch.id_sucursal}
+
+    foreign = client.post("/api/admin/users", headers=headers, json=payload)
+    assert foreign.status_code == 422
+    custom_role = client.post("/api/admin/users", headers=headers, json={**payload, "correo":"custom@example.com", "rol":custom.nombre, "id_sucursal":None})
+    assert custom_role.status_code == 422
+
+
+def test_company_admin_cannot_assign_platform_role(db) -> None:
+    headers, _ = admin_headers(db)
+    platform = get_or_create_role(db, "ADMINISTRADOR_PLATAFORMA")
+    db.commit()
+    response = TestClient(app).post("/api/admin/users", headers=headers, json={
+        "nombres":"Platform", "apellidos":"Forbidden", "correo":"platform.forbidden@example.com",
+        "password":"Seguro123!", "rol":platform.nombre,
+    })
+    assert response.status_code == 403

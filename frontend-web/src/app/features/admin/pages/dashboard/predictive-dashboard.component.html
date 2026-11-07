@@ -1,0 +1,150 @@
+<section class="predictive-dashboard" aria-labelledby="predictive-title">
+  <header>
+    <div>
+      <p class="eyebrow">ANÁLISIS AVANZADO</p>
+      <h2 id="predictive-title">Dashboard predictivo</h2>
+      <p>Estimaciones de demanda calculadas desde ventas pagadas; no modifican inventario.</p>
+    </div>
+    @if (dashboard?.modelo) {
+      <div class="model-info">
+        <span>Modelo {{ dashboard?.modelo?.version }}</span>
+        <span>Actualizado: {{ dashboard?.modelo?.actualizado_en | date:'short' }}</span>
+      </div>
+    }
+  </header>
+
+  @if (isLoading) {
+    <p role="status">Cargando permisos de analítica…</p>
+  } @else {
+    @if (!features.dashboard_predictivo) {
+      <p class="notice" role="status">El dashboard predictivo no está incluido en el plan actual.</p>
+    } @else {
+      <div class="filters">
+        <label>Desde<input type="date" [(ngModel)]="startDate" [max]="endDate"></label>
+        <label>Hasta<input type="date" [(ngModel)]="endDate" [min]="startDate"></label>
+        <label>Sucursal
+          <select [(ngModel)]="selectedBranch">
+            <option value="">Todas</option>
+            @for (branch of branches; track branch.id_sucursal) {
+              <option [value]="branch.id_sucursal">{{ branch.nombre }}</option>
+            }
+          </select>
+        </label>
+        <label>Producto
+          <select [(ngModel)]="selectedProduct">
+            <option value="">Todos</option>
+            @for (product of productOptions; track product.id) {
+              <option [value]="product.id">{{ product.name }}</option>
+            }
+          </select>
+        </label>
+        <button type="button" (click)="onFiltersChanged()" [disabled]="isRefreshing">
+          {{ isRefreshing ? 'Calculando…' : 'Aplicar filtros' }}
+        </button>
+      </div>
+
+      @if (dashboard) {
+        <div class="summary-grid">
+          <article><span>Productos/sucursal evaluados</span><strong>{{ dashboard.evaluacion.productos_evaluados }}</strong></article>
+          <article><span>MAE (unidades)</span><strong>{{ dashboard.evaluacion.mae_unidades ?? '—' }}</strong></article>
+          <article><span>WAPE</span><strong>{{ dashboard.evaluacion.wape_porcentaje === null ? '—' : dashboard.evaluacion.wape_porcentaje + '%' }}</strong></article>
+          <article><span>Datos insuficientes</span><strong>{{ dashboard.productos_con_datos_insuficientes }}</strong></article>
+        </div>
+        <p class="period">Período histórico: {{ dashboard.periodo.desde | date:'mediumDate' }} – {{ dashboard.periodo.hasta | date:'mediumDate' }}.
+          Proyección: los 7 días siguientes.</p>
+
+        @if (dashboard.tendencia_historica_semanal.length) {
+          <section class="chart-section">
+            <h3>Demanda histórica semanal</h3>
+            <div class="bars" role="img" aria-label="Unidades vendidas por semana">
+              @for (week of dashboard.tendencia_historica_semanal; track week.semana_desde) {
+                <div class="bar-column">
+                  <span>{{ week.unidades_vendidas }}</span>
+                  <div class="bar-track"><div class="bar historical" [style.height.%]="barWidth(week.unidades_vendidas, maxPredictedDemand)"></div></div>
+                  <small>{{ week.semana_desde | date:'dd/MM' }}</small>
+                </div>
+              }
+            </div>
+          </section>
+        }
+
+        <section class="prediction-section">
+          <h3>Predicción y cobertura por producto y sucursal</h3>
+          @if (!dashboard.predicciones.length) {
+            <p class="notice">No hay ventas ni inventario para los filtros seleccionados.</p>
+          } @else {
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Producto</th><th>Sucursal</th><th>Demanda (7 días)</th><th>Stock</th><th>Tendencia</th><th>Riesgo</th><th>Evaluación</th></tr></thead>
+                <tbody>
+                  @for (item of dashboard.predicciones; track item.producto_id + ':' + item.sucursal_id) {
+                    <tr>
+                      <td>{{ item.producto }}</td><td>{{ item.sucursal }}</td>
+                      <td>
+                        @if (item.prediccion_7_dias; as forecast) {
+                          <div class="forecast-value">{{ forecast.demanda_esperada }} unidades</div>
+                          <div class="mini-bars" [attr.aria-label]="'Demanda diaria estimada: ' + forecast.demanda_diaria.join(', ')">
+                            @for (day of forecast.demanda_diaria; track $index) {
+                              <span [style.height.%]="barWidth(day, maxPredictedDemand)" [title]="day + ' unidades'"></span>
+                            }
+                          </div>
+                        } @else { <span class="muted">Datos insuficientes</span> }
+                      </td>
+                      <td>{{ item.stock_disponible ?? 'Sin registro' }}</td>
+                      <td>{{ item.tendencia }}</td>
+                      <td><span class="risk" [class.alert]="item.riesgo_inventario === 'posible_agotamiento'">{{ item.riesgo_inventario }}</span></td>
+                      <td>{{ item.evaluacion.mae === null ? 'No evaluable' : 'MAE ' + item.evaluacion.mae + ' · WAPE ' + (item.evaluacion.wape_porcentaje ?? '—') + '%' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+
+      @if (history) {
+        <section class="chart-section">
+          <h3>Backtest histórico: predicción y demanda real</h3>
+          <p class="muted">{{ history.nota }}</p>
+          @if (history.resultados.length) {
+            <div class="history-list">
+              @for (item of history.resultados.slice(-12); track item.producto_id + ':' + item.sucursal_id + ':' + item.periodo.desde) {
+                <div class="history-row">
+                  <strong>{{ item.producto }} · {{ item.sucursal }} <small>{{ item.periodo.desde | date:'dd/MM/yy' }}</small></strong>
+                  <div class="compare-bar"><span>Predicha {{ item.demanda_predicha }}</span><div><i class="predicted" [style.width.%]="barWidth(item.demanda_predicha, maxHistoryDemand)"></i></div></div>
+                  <div class="compare-bar"><span>Real {{ item.demanda_real }}</span><div><i class="actual" [style.width.%]="barWidth(item.demanda_real, maxHistoryDemand)"></i></div></div>
+                </div>
+              }
+            </div>
+          } @else { <p class="notice">Todavía no hay períodos históricos suficientes para el backtest.</p> }
+        </section>
+      }
+    }
+
+    @if (features.segmentacion_kmeans) {
+      <section class="segments-section">
+        <h3>Segmentación de clientes (K-Means)</h3>
+        @if (!segments) { <p role="status">Calculando segmentos…</p> }
+        @else if (segments.estado === 'datos_insuficientes') {
+          <p class="notice">Se requieren al menos {{ segments.minimo_clientes }} clientes en el alcance seleccionado; hay {{ segments.clientes_analizados }}.</p>
+        } @else {
+          <p class="muted">{{ segments.clientes_analizados }} clientes · k={{ segments.k }} · índice Davies–Bouldin {{ segments.indice_davies_bouldin }}. Variables normalizadas con z-score.</p>
+          <div class="segment-grid">
+            @for (segment of segments.segmentos; track segment.segmento) {
+              <article>
+                <h4>Segmento {{ segment.segmento }}</h4>
+                <strong>{{ segment.clientes }} clientes</strong>
+                <p>{{ segment.caracteristicas.join(' · ') }}</p>
+                <small>{{ segment.promedios.compras_pagadas }} compras promedio · {{ segment.promedios.gasto_pagado | number:'1.0-2' }} gasto promedio · {{ segment.promedios.dias_desde_ultima_compra }} días desde última compra</small>
+              </article>
+            }
+          </div>
+        }
+      </section>
+    } @else if (!features.dashboard_predictivo) {
+      <p class="notice">La segmentación K-Means no está incluida en el plan actual.</p>
+    }
+  }
+  @if (error) { <p class="error" role="alert">{{ error }}</p> }
+</section>

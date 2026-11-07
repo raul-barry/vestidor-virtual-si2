@@ -1,5 +1,6 @@
 from decimal import Decimal
 from types import SimpleNamespace
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -87,10 +88,10 @@ def test_approve_payment_confirms_order(db) -> None:
     headers = register_and_login(client, "cliente@example.com")
     order_id = create_order_for_client(db, client, headers)
     payment = client.post(
-        "/api/payments", headers=headers, json={"id_pedido": order_id, "metodo_pago": "TARJETA"}
+        "/api/payments/stripe/create-intent", headers=headers, json={"id_pedido": order_id}
     )
 
-    response = client.put(f"/api/payments/{payment.json()['id_pago']}/approve", headers=headers)
+    response = client.put(f"/api/payments/{payment.json()['payment']['id_pago']}/approve", headers=headers)
     order = client.get(f"/api/orders/{order_id}", headers=headers)
 
     assert response.status_code == 200
@@ -98,7 +99,7 @@ def test_approve_payment_confirms_order(db) -> None:
     assert order.json()["estado"] == "CONFIRMADO"
 
 
-def test_reject_payment(db) -> None:
+def test_real_or_cash_payment_cannot_be_falsely_rejected_by_demo_endpoint(db) -> None:
     seed_roles(db)
     db.commit()
     client = TestClient(app)
@@ -110,8 +111,8 @@ def test_reject_payment(db) -> None:
 
     response = client.put(f"/api/payments/{payment.json()['id_pago']}/reject", headers=headers)
 
-    assert response.status_code == 200
-    assert response.json()["estado"] == "FALLIDO"
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Solo se puede simular el rechazo de un pago marcado como simulado."
 
 
 def test_duplicate_payment_is_rejected(db) -> None:
@@ -127,6 +128,25 @@ def test_duplicate_payment_is_rejected(db) -> None:
 
     assert response.status_code == 409
     assert response.json()["message"] == "El pedido ya tiene un pago creado"
+
+
+def test_payment_request_uuid_replays_same_payment_and_rejects_changed_method(db) -> None:
+    seed_roles(db)
+    db.commit()
+    client = TestClient(app)
+    headers = register_and_login(client, "payment-idempotency@example.com")
+    order_id = create_order_for_client(db, client, headers)
+    operation_uuid = str(uuid4())
+    request = {"id_pedido": order_id, "metodo_pago": "EFECTIVO", "operation_uuid": operation_uuid}
+
+    first = client.post("/api/payments", headers=headers, json=request)
+    replay = client.post("/api/payments", headers=headers, json=request)
+    changed = client.post("/api/payments", headers=headers,
+                          json={**request, "metodo_pago": "QR"})
+
+    assert first.status_code == replay.status_code == 200
+    assert first.json()["id_pago"] == replay.json()["id_pago"]
+    assert changed.status_code == 409
 
 
 def test_client_cannot_operate_another_clients_payment(db) -> None:

@@ -1,8 +1,10 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
+import { platformAdminGuard } from './core/guards/platform-admin.guard';
 
 export const routes: Routes = [
+  { path: 'admin/exchanges', canActivate: [authGuard], data: {roles: ['ADMINISTRADOR', 'ENCARGADO_SUCURSAL']}, loadComponent: () => import('./features/admin/pages/exchanges/exchange-management.component').then(c => c.ExchangeManagementComponent) },
   ...['recommendations', 'fitting'].map(mode => ({path: 'experience/' + mode, canActivate: [authGuard], data: {mode}, loadComponent: () => import('./features/experience/experience.component').then(c => c.ExperienceComponent)})),
   ...['recommendations', 'fitting'].map(mode => ({path: mode, canActivate: [authGuard], data: {mode}, loadComponent: () => import('./features/experience/experience.component').then(c => c.ExperienceComponent)})),
   { path: 'pos', canActivate: [authGuard], data: {roles: ['ADMINISTRADOR', 'CAJERO']}, loadComponent: () => import('./features/commerce/pos.component').then(c => c.PosComponent) },
@@ -52,6 +54,14 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     loadChildren: () => import('./features/admin/admin.routes').then((routes) => routes.ADMIN_ROUTES)
   },
+  { path: 'platform/organizations', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/organizations/organization-list.component').then(c => c.OrganizationListComponent) },
+  { path: 'platform/organizations/provision', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/organizations/tenant-provisioning.component').then(c => c.TenantProvisioningComponent) },
+  { path: 'platform/organizations/:id', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/organizations/organization-detail.component').then(c => c.OrganizationDetailComponent) },
+  { path: 'platform/subscriptions', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/organizations/subscription-management.component').then(c => c.SubscriptionManagementComponent) },
+  { path: 'platform/plans', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/organizations/commercial-plan-management.component').then(c => c.CommercialPlanManagementComponent) },
+  { path: 'platform/security', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/security-overview.component').then(c => c.SecurityOverviewComponent) },
+  { path: 'platform/roles', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/roles/role-list.component').then(c => c.RoleListComponent) },
+  { path: 'platform/ai', canActivate: [platformAdminGuard], loadComponent: () => import('./features/admin/pages/platform-ai-settings.component').then(c => c.PlatformAISettingsComponent) },
 {
   path: '',
   pathMatch: 'full',

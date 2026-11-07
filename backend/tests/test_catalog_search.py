@@ -94,5 +94,6 @@ def test_search_catalog_is_documented_in_openapi() -> None:
         "talla",
         "color",
         "precio_max",
+        "organization_slug",
     }
     assert "200" in operation["responses"]

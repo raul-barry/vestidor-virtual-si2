@@ -64,7 +64,7 @@ def test_logout_rejects_user_without_active_session(db) -> None:
     db.commit()
     registration = client.post("/api/auth/register", json=register_payload())
     user_id = registration.json()["id_usuario"]
-    token = create_access_token({"id_usuario": user_id, "rol": "CLIENTE"})
+    token = create_access_token({"id_usuario": user_id, "id_organizacion": 1, "rol": "CLIENTE"})
 
     response = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
 

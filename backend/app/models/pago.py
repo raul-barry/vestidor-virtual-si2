@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -21,5 +21,10 @@ class Pago(Base):
     proveedor: Mapped[str | None] = mapped_column(String(30), nullable=True)
     referencia_externa: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
     evento_externo: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="BOB")
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cash_received: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    cash_change: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
 
     pedido: Mapped["Pedido"] = relationship()

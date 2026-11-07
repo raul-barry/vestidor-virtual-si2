@@ -31,6 +31,7 @@ class UpdateStatusRequest(BaseModel):
 
 class UpdateRoleRequest(BaseModel):
     id_rol: int
+    id_sucursal: int | None = None
 
 
 class UpdateUserAdminRequest(BaseModel):

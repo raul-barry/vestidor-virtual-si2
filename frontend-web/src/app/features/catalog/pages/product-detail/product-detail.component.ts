@@ -6,7 +6,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../../../core/services/api.service';
 import { AuthService } from '../../../auth/services/auth.service';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 import {
   ProductAvailabilityResponse,
   ProductoVariante,
@@ -18,6 +18,7 @@ import { CatalogService } from '../../services/catalog.service';
 import { CartService } from '../../../cart/services/cart.service';
 import { API_URL } from '../../../../core/config/api.config';
 import { BackLinkComponent } from '../../../../shared/components/back-link.component';
+import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 
 @Component({
   selector: 'app-product-detail',
@@ -44,6 +45,7 @@ export class ProductDetailComponent implements OnInit {
 
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly outbox = inject(OutboxSyncService);
   productId = 0;
 
   variants: ProductVariantsResponse | null = null;
@@ -52,10 +54,17 @@ export class ProductDetailComponent implements OnInit {
   description = '';
   imageUrl = 'assets/catalog/editorial-menswear.png';
   isLoading = true;
+  offline = false;
   selectedVariant: ProductoVariante | null = null;
   isAddingToCart = false;
+  hasCatalogContext = true;
 
   ngOnInit(): void {
+    this.hasCatalogContext = this.catalogService.canLoadCatalog;
+    if (!this.hasCatalogContext) {
+      this.isLoading = false;
+      return;
+    }
     const productId = Number(this.route.snapshot.paramMap.get('id'));
     if (!Number.isInteger(productId) || productId <= 0) {
       this.handleError();
@@ -63,14 +72,35 @@ export class ProductDetailComponent implements OnInit {
     }
 
     this.productId = productId;
+    if (this.catalogService.online === false) {
+      this.offline = true;
+      this.catalogService.getProducts().subscribe({
+        next: products => {
+          const product = products.find(item => item.id_producto === productId);
+          if (!product) { this.handleError(); return; }
+          this.variants = { id_producto: product.id_producto, nombre_producto: product.nombre, tallas: [...new Set(product.variantes.map(v => v.talla))], colores: [...new Set(product.variantes.map(v => v.color))], variantes: product.variantes };
+          this.availability = { id_producto: product.id_producto, nombre_producto: product.nombre, disponibilidad: [] };
+          this.price = product.precio_base; this.description = product.descripcion ?? '';
+          this.imageUrl = this.resolveImageUrl(product.imagen_url); this.isLoading = false;
+        }, error: () => this.handleError()
+      });
+      return;
+    }
     forkJoin({
       variants: this.catalogService.getProductVariants(productId),
       availability: this.catalogService.getProductAvailability(productId),
-      products: this.catalogService.getProducts()
+      products: this.catalogService.getProducts(),
+      saleStock: this.auth.hasSession()
+        ? this.api.get<any[]>('/api/reservations/availability').pipe(catchError(() => of([] as any[])))
+        : of([] as any[])
     }).subscribe({
       next: (response) => {
         this.variants = response.variants;
         this.availability = response.availability;
+        for (const variant of response.variants.variantes) {
+          void this.outbox.cacheVariantStock(variant.id_variante,
+            (response.saleStock as any[]).filter(item => Number(item.id_variante) === variant.id_variante));
+        }
         const product = response.products.find((item) => item.id_producto === productId);
         this.price = product?.precio_base ?? '';
         this.description = product?.descripcion ?? '';
@@ -84,6 +114,12 @@ export class ProductDetailComponent implements OnInit {
 
   selectVariant(variant: ProductoVariante | null): void {
     this.selectedVariant = variant;
+    if (variant && this.offline) {
+      void this.outbox.cachedVariantStock(variant.id_variante).then(stock => {
+        this.availability = { id_producto: this.productId, nombre_producto: this.variants?.nombre_producto ?? '',
+          disponibilidad: stock.map(item => ({ id_sucursal: 0, nombre_sucursal: item.sucursal, direccion: '', stock_disponible: item.disponible })) };
+      });
+    }
     if (variant) this.recordPreference('seleccion');
   }
 
@@ -114,9 +150,22 @@ export class ProductDetailComponent implements OnInit {
     }
 
     this.isAddingToCart = true;
+    if (this.offline || typeof navigator !== 'undefined' && !navigator.onLine) {
+      void this.outbox.addOfflineCartItem(this.selectedVariant, {
+        nombre: this.variants?.nombre_producto ?? '', precio_base: this.price
+      }).then(() => {
+        this.isAddingToCart = false;
+        this.snackBar.open('Producto guardado en el carrito offline. Precio y disponibilidad provisionales.', 'Cerrar', { duration: 5000 });
+      }).catch(error => {
+        this.isAddingToCart = false;
+        this.snackBar.open(error?.message ?? 'No fue posible guardar el producto offline', 'Cerrar', { duration: 5000 });
+      });
+      return;
+    }
     this.cartService.addItem(this.selectedVariant.id_variante, 1).subscribe({
       next: () => {
         this.isAddingToCart = false;
+        this.cartService.getCart().subscribe(cart => void this.outbox.saveLocalCart(cart));
         this.snackBar.open('Producto agregado al carrito', 'Cerrar', { duration: 3000 });
       },
       error: (error: { status?: number; error?: { message?: string; detail?: string } }) => {

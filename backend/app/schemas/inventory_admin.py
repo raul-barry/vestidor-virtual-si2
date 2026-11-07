@@ -12,6 +12,10 @@ class InventoryResponse(BaseModel):
     color: str
     sucursal: str
     stock: int
+    stock_disponible: int
+    stock_reservado: int
+    stock_vendido: int
+    stock_total: int
     stock_bajo: bool
 
 
@@ -37,5 +41,6 @@ class InventoryMovementResponse(BaseModel):
     cantidad: int
     stock_anterior: int
     stock_nuevo: int
+    motivo: str
     fecha: datetime
     usuario: str

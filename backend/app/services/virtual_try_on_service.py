@@ -12,11 +12,10 @@ from pathlib import Path
 import base64
 import mimetypes
 
-import httpx
-
 from PIL import Image, ImageChops, ImageOps
 
 from app.core.config import settings
+from app.services.gemini_client import GeminiClient, GeminiClientError
 
 try:  # Optional: the deployed dependency improves positioning, never blocks Pillow fallback.
     import cv2
@@ -107,7 +106,8 @@ class LocalTryOnProvider(VirtualTryOnProvider):
 class GeminiVirtualTryOnProvider(VirtualTryOnProvider):
     """Use Gemini's image model to replace clothing in a customer photo."""
 
-    _endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    def __init__(self, client: GeminiClient | None = None) -> None:
+        self.client = client or GeminiClient()
 
     @staticmethod
     def _inline_image(data: bytes, mime_type: str) -> dict[str, object]:
@@ -132,20 +132,11 @@ class GeminiVirtualTryOnProvider(VirtualTryOnProvider):
             ]}],
             "generationConfig": {"responseModalities": ["IMAGE"]},
         }
-        url = self._endpoint.format(model=settings.gemini_model)
         try:
-            with httpx.Client(timeout=90.0) as client:
-                response = client.post(
-                    url,
-                    headers={"x-goog-api-key": settings.gemini_api_key},
-                    json=body,
-                )
-        except httpx.HTTPError as exc:
-            raise GeminiTryOnError("No fue posible conectar con Gemini") from exc
-        if response.status_code >= 400:
-            raise GeminiTryOnError(f"Gemini rechazó la edición ({response.status_code})")
+            payload = self.client.generate_content(body)
+        except GeminiClientError as exc:
+            raise GeminiTryOnError(str(exc)) from exc
         try:
-            payload = response.json()
             parts = payload["candidates"][0]["content"]["parts"]
             image_part = next(part for part in parts if "inlineData" in part or "inline_data" in part)
             image_data = image_part.get("inlineData") or image_part.get("inline_data")

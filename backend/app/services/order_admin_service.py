@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -70,6 +72,8 @@ class OrderAdminService:
 
         try:
             order = self.repository.update_order_status(order, new_state)
+            if new_state == "ENTREGADO":
+                order.fecha_entrega = datetime.now(timezone.utc)
             self.repository.create_status_audit(
                 id_usuario,
                 f"Pedido {order.id_pedido}: estado {old_state} -> {new_state}",

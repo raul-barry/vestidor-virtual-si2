@@ -16,6 +16,7 @@ import { Payment } from '../../../../shared/models/payment.model';
 import { OrderService } from '../../../orders/services/order.service';
 import { PaymentMethod, PaymentService } from '../../services/payment.service';
 import { environment } from '../../../../../environments/environment';
+import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 
 @Component({
   selector: 'app-payment', standalone: true,
@@ -27,6 +28,7 @@ export class PaymentComponent implements OnInit, AfterViewInit {
   private readonly route = inject(ActivatedRoute);
   private readonly orderService = inject(OrderService);
   private readonly paymentService = inject(PaymentService);
+  private readonly outbox = inject(OutboxSyncService);
   private readonly snackBar = inject(MatSnackBar);
   @ViewChild('paymentElement') paymentElement?: ElementRef<HTMLDivElement>;
   readonly paymentForm = this.formBuilder.group({ metodo_pago: ['TARJETA' as PaymentMethod, [Validators.required]] });
@@ -53,6 +55,17 @@ export class PaymentComponent implements OnInit, AfterViewInit {
 
   createPayment(): void {
     if (!this.order || this.paymentForm.invalid || this.isSubmitting) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.isSubmitting = true;
+      void this.outbox.queuePaymentRequest(this.order.id_pedido, this.selectedMethod).then(() => {
+        this.isSubmitting = false;
+        this.snackBar.open('Solicitud guardada. El banco aún no ha autorizado el pago.', 'Cerrar', { duration: 5000 });
+      }).catch(error => {
+        this.isSubmitting = false;
+        this.snackBar.open(error?.message ?? 'No fue posible guardar la solicitud offline.', 'Cerrar', { duration: 5000 });
+      });
+      return;
+    }
     if (this.selectedMethod === 'TARJETA') {
       // Compatibility with older test doubles/embedders; the production service always exposes Stripe.
       if (typeof (this.paymentService as PaymentService & { createStripeIntent?: unknown }).createStripeIntent !== 'function') {
@@ -80,12 +93,12 @@ export class PaymentComponent implements OnInit, AfterViewInit {
     this.snackBar.open('Pago enviado. Esperando confirmación segura de Stripe…', 'Cerrar', { duration: 4000 }); this.pollStatus(0);
   }
   simulateApproval(message: string): void {
-    if (!this.payment || this.isSubmitting) return;
+    if (!this.payment || this.payment.simulated !== true || this.isSubmitting) return;
     this.isSubmitting = true;
     setTimeout(() => this.paymentService.approvePayment(this.payment!.id_pago).subscribe({ next: payment => { this.payment = payment; this.successPayment = payment; this.isSubmitting = false; this.snackBar.open(message, 'Cerrar', { duration: 4000 }); }, error: error => this.showError(error) }), 1200);
   }
   confirmQrPayment(): void {
-    if (!this.payment || this.payment.metodo_pago !== 'QR' || this.isSubmitting) return;
+    if (!this.payment || this.payment.simulated !== true || this.payment.metodo_pago !== 'QR' || this.isSubmitting) return;
     this.isSubmitting = true;
     setTimeout(() => this.paymentService.confirmQrPayment(this.payment!.id_pago).subscribe({ next: payment => { this.payment = payment; this.successPayment = payment; this.isSubmitting = false; this.snackBar.open('Pago QR realizado correctamente (simulación).', 'Cerrar', { duration: 4000 }); }, error: error => this.showError(error) }), 1200);
   }

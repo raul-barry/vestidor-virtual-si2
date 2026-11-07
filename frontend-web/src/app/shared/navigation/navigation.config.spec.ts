@@ -10,7 +10,7 @@ describe('Role navigation', () => {
   });
   for (const role of ['ENCARGADO', 'ENCARGADO_SUCURSAL']) {
     it('shows only operational modules for ' + role, () => {
-      expect(navigationGroups(role).flatMap(x => x.links.map(y => y.path))).toEqual(['/inventory', '/reservations']);
+      expect(navigationGroups(role).flatMap(x => x.links.map(y => y.path))).toEqual(['/inventory', '/reservations', '/admin/exchanges']);
       expect(homeForRole(role)).toBe('/inventory');
     });
   }
@@ -23,11 +23,25 @@ describe('Role navigation', () => {
     expect(homeForRole('ADMINISTRADOR')).toBe('/admin');
     expect(isStaff(' encargado ')).toBeTrue();
   });
+  it('shows global role management only to platform administrators', () => {
+    expect(navigationGroups('ADMINISTRADOR').flatMap(x => x.links.map(y => y.path))).not.toContain('/platform/roles');
+    expect(navigationGroups('ADMINISTRADOR').flatMap(x => x.links.map(y => y.path))).not.toContain('/admin/roles');
+    expect(navigationGroups('ADMINISTRADOR_PLATAFORMA').flatMap(x => x.links.map(y => y.path))).toContain('/platform/roles');
+    expect(navigationGroups('ADMINISTRADOR_PLATAFORMA').flatMap(x => x.links.map(y => y.path))).toContain('/platform/subscriptions');
+    expect(navigationGroups('ADMINISTRADOR_PLATAFORMA').flatMap(x => x.links.map(y => y.path))).toContain('/platform/plans');
+    expect(navigationGroups('ADMINISTRADOR_PLATAFORMA').flatMap(x => x.links.map(y => y.path))).toContain('/platform/ai');
+    expect(routes.find(x => x.path === 'platform/roles')?.canActivate).toBeDefined();
+  });
   it('resolves every navigation destination against the existing routes', () => {
-    const links = [...CUSTOMER_LINKS, ...['ADMINISTRADOR', 'ENCARGADO', 'CAJERO'].flatMap(role => navigationGroups(role).flatMap(x => x.links))];
+    const links = [...CUSTOMER_LINKS, ...['ADMINISTRADOR', 'ADMINISTRADOR_PLATAFORMA', 'ENCARGADO', 'CAJERO'].flatMap(role => navigationGroups(role).flatMap(x => x.links))];
     for (const link of links) {
       const path = link.path.slice(1);
-      expect(path.startsWith('admin/') ? ADMIN_ROUTES[0].children?.some(x => x.path === path.slice(6)) : routes.some(x => x.path === path)).withContext(link.path).toBeTrue();
+      const exists = path === 'admin/exchanges'
+        ? routes.some(x => x.path === path)
+        : path.startsWith('admin/')
+          ? ADMIN_ROUTES[0].children?.some(x => x.path === path.slice(6))
+          : routes.some(x => x.path === path);
+      expect(exists).withContext(link.path).toBeTrue();
     }
     expect(routes.find(x => x.path === '')?.redirectTo).toBe('catalog');
   });

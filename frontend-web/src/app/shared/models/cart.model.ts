@@ -1,5 +1,6 @@
 export interface CartItem {
   id_detalle: number;
+  id_variante?: number;
   producto: string;
   talla: string;
   color: string;

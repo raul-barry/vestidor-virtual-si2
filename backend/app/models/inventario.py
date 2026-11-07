@@ -13,6 +13,7 @@ class Inventario(Base):
     id_variante: Mapped[int] = mapped_column(ForeignKey("producto_variante.id_variante"), nullable=False, index=True)
     stock_disponible: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     stock_reservado: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stock_vendido: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     sucursal: Mapped["Sucursal"] = relationship(back_populates="inventarios")
     variante: Mapped["ProductoVariante"] = relationship(back_populates="inventarios")

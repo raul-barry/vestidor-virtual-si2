@@ -18,9 +18,10 @@ class MemorySessionStore implements SessionStore {
   }
 }
 
-String jwt({String role = 'CLIENTE', int? expires}) =>
+String jwt({String role = 'CLIENTE', int? expires, int? organizationId = 1}) =>
     'header.${base64Url.encode(utf8.encode(jsonEncode({
               'rol': role,
+              if (organizationId != null) 'id_organizacion': organizationId,
               'exp': expires ??
                   DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
             }))).replaceAll('=', '')}.signature';

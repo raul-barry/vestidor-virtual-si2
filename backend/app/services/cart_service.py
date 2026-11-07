@@ -1,10 +1,14 @@
 from decimal import Decimal
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.models.carrito import Carrito
+from app.models.inventario import Inventario
+from app.models.reserva import Reserva
+from app.models.cliente import Cliente
 from app.repositories.cart_repository import CartRepository
 from app.schemas.cart import CartItemResponse, CartResponse
 from app.services.pricing_service import current_price
@@ -29,7 +33,7 @@ class CartService:
             raise AppException("Cliente no encontrado", status_code=404)
         return cliente.id_cliente
 
-    def add_item(self, id_cliente: int, id_variante: int, cantidad: int) -> CartResponse:
+    def add_item(self, id_cliente: int, id_variante: int, cantidad: int, id_reserva: int | None = None) -> CartResponse:
         if cantidad <= 0:
             raise AppException("La cantidad debe ser mayor a cero", status_code=422)
 
@@ -43,11 +47,24 @@ class CartService:
             cart = self._get_or_create_active_cart(id_cliente)
             item = self.repository.get_item_by_cart_and_variant(cart.id_carrito, id_variante)
             requested_quantity = cantidad if item is None else item.cantidad + cantidad
-            available_stock = self.repository.get_available_stock(id_variante)
-            if available_stock is not None and requested_quantity > available_stock:
-                raise AppException("La cantidad supera el inventario disponible", status_code=409)
+            if id_reserva is not None:
+                reservation = self.repository.db.scalar(
+                    select(Reserva).where(Reserva.id_reserva == id_reserva).with_for_update()
+                )
+                client = self.repository.db.get(Cliente, id_cliente)
+                inventory = self.repository.db.get(Inventario, reservation.id_inventario) if reservation else None
+                if (reservation is None or client is None or reservation.id_usuario != client.id_usuario
+                        or inventory is None or inventory.id_variante != id_variante
+                        or reservation.estado not in ("PENDIENTE", "RESERVADA", "CONFIRMADA")):
+                    raise AppException("La reserva no está disponible para compra", status_code=409)
+                if cantidad != reservation.cantidad or item is not None:
+                    raise AppException("La reserva debe agregarse como una línea independiente", status_code=409)
+            else:
+                available_stock = self.repository.get_available_stock(id_variante)
+                if available_stock is not None and requested_quantity > available_stock:
+                    raise AppException("La cantidad supera el inventario disponible", status_code=409)
             if item is None:
-                self.repository.add_item(cart.id_carrito, id_variante, cantidad, current_price(self.repository.db, variante.producto))
+                self.repository.add_item(cart.id_carrito, id_variante, cantidad, current_price(self.repository.db, variante.producto), id_reserva)
             else:
                 self.repository.update_quantity(item, requested_quantity)
             self.repository.db.commit()
@@ -102,11 +119,13 @@ class CartService:
         items = [
             CartItemResponse(
                 id_detalle=item.id_detalle,
+                id_variante=item.id_variante,
                 producto=item.variante.producto.nombre,
                 talla=item.variante.talla.nombre,
                 color=item.variante.color.nombre,
                 cantidad=item.cantidad,
                 precio_unitario=item.precio_unitario,
+                id_reserva=item.id_reserva,
             )
             for item in self.repository.get_cart_items(cart.id_carrito)
         ]

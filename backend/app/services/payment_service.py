@@ -1,12 +1,15 @@
+from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
+from app.core.config import settings
 from app.models.pago import Pago
 from app.models.pedido import Pedido
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.payment import CreatePaymentRequest, PaymentResponse
-from app.services.stock_sale_service import consume_order_stock
+from app.services.stock_sale_service import consume_order_stock, release_order_stock
 
 
 class PaymentService:
@@ -26,12 +29,24 @@ class PaymentService:
         self._ensure_order_owner(order, id_cliente)
         if order.estado != "PENDIENTE":
             raise AppException("El pedido no está pendiente", status_code=409)
+        if request.operation_uuid:
+            uuid_payment = self.repository.db.scalar(
+                select(Pago).where(Pago.idempotency_key == str(request.operation_uuid))
+            )
+            if uuid_payment is not None and uuid_payment.id_pedido != order.id_pedido:
+                raise AppException("El UUID de pago ya está asociado a otra operación", status_code=409)
         existing = self.repository.get_payment_by_order(request.id_pedido)
         if existing:
+            if request.operation_uuid and existing.idempotency_key == str(request.operation_uuid):
+                if existing.metodo_pago == request.metodo_pago:
+                    return self._to_response(existing)
+                raise AppException("El UUID de pago se reutilizó con otro método", status_code=409)
             if existing.estado != "FALLIDO":
                 raise AppException("El pedido ya tiene un pago creado", status_code=409)
             existing.estado = "PENDIENTE"
             existing.metodo_pago = request.metodo_pago
+            existing.idempotency_key = str(request.operation_uuid) if request.operation_uuid else None
+            existing.currency = settings.stripe_currency.upper()
             # A failed Stripe attempt must not leak its provider reference into
             # a subsequent cash/QR selection for the same order.
             if request.metodo_pago != "TARJETA":
@@ -42,7 +57,11 @@ class PaymentService:
             return self._to_response(existing)
 
         try:
-            payment = self.repository.create_payment(order.id_pedido, request.metodo_pago, order.total)
+            payment = self.repository.create_payment(
+                order.id_pedido, request.metodo_pago, order.total,
+                idempotency_key=str(request.operation_uuid) if request.operation_uuid else None,
+                currency=settings.stripe_currency.upper(),
+            )
             self.repository.db.commit()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
@@ -62,6 +81,7 @@ class PaymentService:
                 raise AppException("El pedido no está pendiente", status_code=409)
             consume_order_stock(self.repository.db, order)
             self.repository.update_payment_status(payment, "PAGADO")
+            payment.fecha_pago = datetime.now(timezone.utc)
             self.repository.update_order_status(order, "CONFIRMADO")
             self.repository.db.commit()
             return self._to_response(payment)
@@ -77,6 +97,8 @@ class PaymentService:
         self._ensure_order_owner(order, id_cliente)
         try:
             self.repository.update_payment_status(payment, "FALLIDO")
+            order.estado = "PENDIENTE"
+            release_order_stock(self.repository.db, order, reason=f"Pago {payment.id_pago} rechazado")
             self.repository.db.commit()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
@@ -93,7 +115,8 @@ class PaymentService:
         self._ensure_order_owner(order, id_cliente)
         return self._to_response(payment)
 
-    def create_stripe_payment(self, id_pedido: int, id_cliente: int | None, intent: dict) -> PaymentResponse:
+    def create_stripe_payment(self, id_pedido: int, id_cliente: int | None, intent: dict, *, simulated: bool = False) -> PaymentResponse:
+        provider_name = "STRIPE_SIMULADO" if simulated else "STRIPE"
         order = self.repository.get_order_by_id(id_pedido)
         if order is None:
             raise AppException("Pedido no encontrado", status_code=404)
@@ -102,12 +125,23 @@ class PaymentService:
             raise AppException("El pedido no está pendiente", status_code=409)
         existing = self.repository.get_payment_by_order(id_pedido)
         if existing and existing.estado not in ("FALLIDO", "CANCELADO"):
-            if existing.referencia_externa != intent["id"]:
+            if existing.referencia_externa not in (None, intent["id"]):
                 raise AppException("El pedido ya tiene un pago creado", status_code=409)
+            if existing.proveedor not in (None, "STRIPE", "STRIPE_SIMULADO"):
+                raise AppException("El pedido ya tiene un pago creado", status_code=409)
+            if existing.referencia_externa is None:
+                existing.proveedor = provider_name
+                existing.simulated = simulated
+                existing.currency = settings.stripe_currency.upper()
+                existing.referencia_externa = intent["id"]
+                existing.evento_externo = None
+                self.repository.db.commit()
             return self._to_response(existing)
         if existing:
             existing.metodo_pago = "TARJETA"
-            existing.proveedor = "STRIPE"
+            existing.proveedor = provider_name
+            existing.simulated = simulated
+            existing.currency = settings.stripe_currency.upper()
             existing.referencia_externa = intent["id"]
             existing.evento_externo = None
             existing.estado = "PENDIENTE"
@@ -115,7 +149,8 @@ class PaymentService:
             return self._to_response(existing)
         try:
             payment = self.repository.create_payment(
-                id_pedido, "TARJETA", order.total, proveedor="STRIPE", referencia_externa=intent["id"]
+                id_pedido, "TARJETA", order.total, proveedor=provider_name, referencia_externa=intent["id"],
+                simulated=simulated, currency=settings.stripe_currency.upper(),
             )
             self.repository.db.commit()
             return self._to_response(payment)
@@ -130,6 +165,8 @@ class PaymentService:
             raise AppException("Pago no encontrado", status_code=404)
         payment.proveedor = "STRIPE_SIMULADO"
         payment.referencia_externa = reference
+        payment.simulated = True
+        payment.currency = settings.stripe_currency.upper()
         self.repository.db.commit()
         return self._to_response(payment)
 
@@ -162,4 +199,8 @@ class PaymentService:
             fecha_pago=payment.fecha_pago,
             proveedor=payment.proveedor,
             referencia_externa=payment.referencia_externa,
+            currency=payment.currency,
+            simulated=payment.simulated,
+            cash_received=payment.cash_received,
+            cash_change=payment.cash_change,
         )

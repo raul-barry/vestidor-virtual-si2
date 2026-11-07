@@ -25,6 +25,34 @@ export class TokenService {
     return this.getToken() !== null;
   }
 
+  getClaims(): Record<string, unknown> | null {
+    const token = this.getToken();
+    if (!token) return null;
+    try {
+      const encodedPayload = token.split('.')[1];
+      if (!encodedPayload) return null;
+      const payload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+      return JSON.parse(atob(payload)) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  getOrganizationId(): number | null {
+    const value = this.getClaims()?.['id_organizacion'];
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  getUserId(): number | null {
+    const value = this.getClaims()?.['id_usuario'];
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
+  }
+
+  getRole(): string | null {
+    const value = this.getClaims()?.['rol'];
+    return typeof value === 'string' ? value : null;
+  }
+
   private isExpired(token: string): boolean {
     try {
       const encodedPayload = token.split('.')[1];

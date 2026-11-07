@@ -24,8 +24,23 @@ class ClientRepository {
     await api.request('POST', '/api/auth/logout');
   }
 
-  Future<void> register(Json data) async {
-    await api.request('POST', '/api/auth/register', data);
+  Future<Json> issueDeviceSyncCredential(String clientId) =>
+      object('POST', '/api/sync/device-credentials', {'client_id': clientId});
+  Future<void> revokeDeviceSyncCredential(int id) async {
+    await api.request('DELETE', '/api/sync/device-credentials/$id');
+  }
+
+  Future<void> register(Json data, {String? organizationSlug}) async {
+    final slug = organizationSlug?.trim().toLowerCase() ?? '';
+    if (!RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+      throw ApiException(0, 'Selecciona una tienda antes de crear una cuenta.');
+    }
+    await api.request(
+        'POST',
+        '/api/auth/register?${Uri(queryParameters: {
+              'organization_slug': slug
+            }).query}',
+        data);
   }
 
   Future<Json> requestReset(String email) => object(
@@ -35,21 +50,44 @@ class ClientRepository {
         {'token': token.trim(), 'nueva_password': password});
   }
 
-  Future<List<Json>> catalog([Map<String, String> filters = const {}]) {
-    final q = query(filters);
-    return list(q.isEmpty
-        ? '/api/catalog/products'
-        : '/api/catalog/products/search?$q');
+  String _catalogQuery(Map<String, String> filters, String? organizationSlug) {
+    final values = <String, String>{};
+    if (api.token == null) {
+      final slug = organizationSlug?.trim().toLowerCase() ?? '';
+      if (!RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+        throw ApiException(
+            0, 'Selecciona una tienda para consultar el catálogo.');
+      }
+      values['organization_slug'] = slug;
+    }
+    values.addAll({
+      for (final entry in filters.entries)
+        if (entry.value.trim().isNotEmpty) entry.key: entry.value.trim(),
+    });
+    return Uri(queryParameters: values).query;
   }
 
-  Future<Json> variants(int id) =>
-      object('GET', '/api/catalog/products/$id/variants');
-  Future<Json> availability(int id) =>
-      object('GET', '/api/catalog/products/$id/availability');
+  Future<List<Json>> catalog(
+      [Map<String, String> filters = const {},
+      String? organizationSlug]) async {
+    final q = _catalogQuery(filters, organizationSlug);
+    return list(
+        '/api/catalog/products${filters.values.any((value) => value.trim().isNotEmpty) ? '/search' : ''}?$q');
+  }
+
+  Future<Json> variants(int id, {String? organizationSlug}) async => object(
+      'GET',
+      '/api/catalog/products/$id/variants?${_catalogQuery(const {}, organizationSlug)}');
+  Future<Json> availability(int id, {String? organizationSlug}) async => object(
+      'GET',
+      '/api/catalog/products/$id/availability?${_catalogQuery(const {}, organizationSlug)}');
   Future<Json> cart() => object('GET', '/api/cart');
-  Future<void> addItem(int variant, int quantity) async {
-    await api.request('POST', '/api/cart/items',
-        {'id_variante': variant, 'cantidad': quantity});
+  Future<void> addItem(int variant, int quantity, {int? reservationId}) async {
+    await api.request('POST', '/api/cart/items', {
+      'id_variante': variant,
+      'cantidad': quantity,
+      if (reservationId != null) 'id_reserva': reservationId,
+    });
   }
 
   Future<void> changeQuantity(int id, int quantity) async {
@@ -62,6 +100,13 @@ class ClientRepository {
 
   Future<List<Json>> orders() => list('/api/orders');
   Future<Json> order(int id) => object('GET', '/api/orders/$id');
+  Future<List<Json>> eligibleExchangePurchases() =>
+      list('/api/exchanges/eligible');
+  Future<Json> exchangeOptions(int detailId) =>
+      object('GET', '/api/exchanges/options?id_detalle=$detailId');
+  Future<List<Json>> exchanges() => list('/api/exchanges');
+  Future<Json> requestExchange(Json data) =>
+      object('POST', '/api/exchanges', data);
   Future<Json> createOrder() => object('POST', '/api/orders');
   Future<Json?> payment(int orderId) async {
     try {
@@ -86,11 +131,17 @@ class ClientRepository {
     }
   }
 
+  Future<Json> createStripeIntent(int orderId) =>
+      object('POST', '/api/payments/stripe/create-intent', {'id_pedido': orderId});
+
+  Future<Json> createQrPayment(int orderId) => object(
+      'POST', '/api/payments/qr', {'id_pedido': orderId, 'metodo_pago': 'QR'});
+
   Future<Json> simulatePayment(int id, bool approve) =>
       object('PUT', '/api/payments/$id/${approve ? 'approve' : 'reject'}');
   Future<List<Json>> reservations() => list('/api/reservations');
-  Future<List<Json>> reservationAvailability() =>
-      list('/api/reservations/availability');
+  Future<List<Json>> reservationAvailability({int? variantId}) => list(
+      '/api/reservations/availability${variantId == null ? '' : '?id_variante=$variantId'}');
   Future<void> reserve(int inventory, int quantity) async {
     await api.request('POST', '/api/reservations',
         {'id_inventario': inventory, 'cantidad': quantity});
@@ -98,6 +149,14 @@ class ClientRepository {
 
   Future<void> cancelReservation(int id) async {
     await api.request('PUT', '/api/reservations/$id', {'estado': 'CANCELADA'});
+  }
+
+  Future<void> purchaseReservation(Json reservation) async {
+    await addItem(
+      reservation['id_variante'] as int,
+      reservation['cantidad'] as int,
+      reservationId: reservation['id_reserva'] as int,
+    );
   }
 
   Future<Json> profile() => object('GET', '/api/users/profile');
@@ -117,8 +176,15 @@ class ClientRepository {
       _ => throw ApiException(
           0, 'Elige una fotografía JPG, PNG o WebP para el vestidor.'),
     };
-    return Map<String, dynamic>.from(await api.multipart('/api/experience/virtual-try-on', {'product_id': '$productId', 'variant_id': '$variantId'}, await photo.readAsBytes(), photo.name, mime) as Map);
+    return Map<String, dynamic>.from(await api.multipart(
+        '/api/experience/virtual-try-on',
+        {'product_id': '$productId', 'variant_id': '$variantId'},
+        await photo.readAsBytes(),
+        photo.name,
+        mime,
+        requestTimeout: const Duration(seconds: 120)) as Map);
   }
+
   Future<void> preference(String type, int product, [int? variant]) async {
     await api.request('POST', '/api/experience/preferences',
         {'tipo': type, 'id_producto': product, 'id_variante': variant});

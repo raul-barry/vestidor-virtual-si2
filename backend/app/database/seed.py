@@ -21,8 +21,10 @@ from app.models.rol import Rol
 from app.models.sucursal import Sucursal
 from app.models.talla import Talla
 from app.models.usuario import Usuario
+from app.models.organizacion import Organizacion
+from app.database.plan_seed import seed_commercial_plans
 
-INITIAL_ROLES = ("ADMINISTRADOR", "CLIENTE", "ENCARGADO_SUCURSAL", "CAJERO")
+INITIAL_ROLES = ("ADMINISTRADOR", "CLIENTE", "ENCARGADO_SUCURSAL", "CAJERO", "EMPLEADO", "ADMINISTRADOR_PLATAFORMA")
 INITIAL_PASSWORDS = {
     "admin@vestidor.local": "Admin123!",
     "cliente@vestidor.local": "Cliente123!",
@@ -251,7 +253,14 @@ def _seed_catalog(db: Session) -> dict[str, int]:
 
 
 def seed_initial_data(db: Session) -> dict[str, int]:
+    organization = db.scalar(select(Organizacion).where(Organizacion.id_organizacion == 1))
+    if organization is None:
+        organization = Organizacion(id_organizacion=1, nombre="FashionStore", slug="fashionstore", estado="ACTIVA")
+        db.add(organization)
+        db.flush()
+    db.info["organization_id"] = organization.id_organizacion
     created = {"roles": seed_roles(db)}
+    created["planes_comerciales"] = seed_commercial_plans(db)
     created["usuarios"] = _seed_users(db)
     created.update(_seed_catalog(db))
     created["ciudades"] = 0
@@ -285,7 +294,7 @@ def seed_initial_data(db: Session) -> dict[str, int]:
 def main() -> None:
     import argparse
     from app.core.config import settings
-    parser = argparse.ArgumentParser(description="Initialize roles or development demo data")
+    parser = argparse.ArgumentParser(description="Initialize system roles or legacy development catalog data")
     parser.add_argument("--roles-only", action="store_true")
     args = parser.parse_args()
     if settings.environment == "production" and not args.roles_only:

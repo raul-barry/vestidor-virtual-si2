@@ -12,6 +12,10 @@ if settings.database_url.startswith("sqlite"):
 engine = create_engine(settings.database_url, **engine_options)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
+from app.core.tenancy import install_tenant_session_hooks
+
+install_tenant_session_hooks()
+
 
 def get_db():
     db: Session = SessionLocal()

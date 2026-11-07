@@ -16,5 +16,5 @@ export class NavbarComponent {
   @Output() signOut = new EventEmitter<void>();
   readonly customerLinks = CUSTOMER_LINKS;
   readonly homeForRole = homeForRole;
-  get roleLabel(): string { return this.role === 'ADMINISTRADOR' ? 'Administración' : this.role === 'CAJERO' ? 'Caja' : 'Operaciones'; }
+  get roleLabel(): string { return this.role === 'ADMINISTRADOR_PLATAFORMA' ? 'Administración SaaS' : this.role === 'ADMINISTRADOR' ? 'Administración' : this.role === 'CAJERO' ? 'Caja' : 'Operaciones'; }
 }

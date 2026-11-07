@@ -19,6 +19,7 @@ describe('CatalogListComponent', () => {
     authService.hasSession.and.returnValue(false);
     authService.logout.and.returnValue(of({ message: 'ok' }));
     catalogService = jasmine.createSpyObj<CatalogService>('CatalogService', ['getProducts', 'searchProducts']);
+    Object.defineProperty(catalogService, 'canLoadCatalog', { get: () => true, configurable: true });
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
     TestBed.configureTestingModule({
@@ -99,5 +100,14 @@ describe('CatalogListComponent', () => {
     component.onFiltersChange({});
 
     expect(catalogService.getProducts).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not request a default tenant when public context is missing', () => {
+    Object.defineProperty(catalogService, 'canLoadCatalog', { get: () => false, configurable: true });
+    fixture = TestBed.createComponent(CatalogListComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    expect(catalogService.getProducts).not.toHaveBeenCalled();
+    expect(component.hasCatalogContext).toBeFalse();
   });
 });

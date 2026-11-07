@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { OrderService } from '../../services/order.service';
 import { OrderHistoryComponent } from './order-history.component';
+import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 
 describe('OrderHistoryComponent', () => {
   let component: OrderHistoryComponent;
@@ -17,17 +18,19 @@ describe('OrderHistoryComponent', () => {
       imports: [OrderHistoryComponent, NoopAnimationsModule],
       providers: [
         { provide: OrderService, useValue: orderService },
+        { provide: OutboxSyncService, useValue: { localOrders: async () => [], syncPending: async () => {} } },
         { provide: Router, useValue: jasmine.createSpyObj<Router>('Router', ['navigate']) },
         { provide: MatSnackBar, useValue: jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']) }
       ]
     }).compileComponents();
   });
 
-  it('loads client orders', () => {
+  it('loads client orders', async () => {
     orderService.getOrders.and.returnValue(of([{ id_pedido: 1, estado: 'PENDIENTE', total: '500.00' }]));
     fixture = TestBed.createComponent(OrderHistoryComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    await fixture.whenStable();
 
     expect(component.orders).toHaveSize(1);
   });

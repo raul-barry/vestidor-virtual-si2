@@ -9,7 +9,8 @@ describe('ProductCardComponent', () => {
   let router: jasmine.SpyObj<Router>;
 
   beforeEach(async () => {
-    router = jasmine.createSpyObj<Router>('Router', ['navigate']);
+    router = jasmine.createSpyObj<Router>('Router', ['navigate', 'parseUrl']);
+    router.parseUrl.and.returnValue({ queryParams: {} } as never);
     await TestBed.configureTestingModule({
       imports: [ProductCardComponent, NoopAnimationsModule],
       providers: [{ provide: Router, useValue: router }]
@@ -38,6 +39,6 @@ describe('ProductCardComponent', () => {
   it('navigates to the product detail', () => {
     component.openProduct();
 
-    expect(router.navigate).toHaveBeenCalledWith(['/catalog/product', 1]);
+    expect(router.navigate).toHaveBeenCalledWith(['/catalog/product', 1], { queryParams: {} });
   });
 });

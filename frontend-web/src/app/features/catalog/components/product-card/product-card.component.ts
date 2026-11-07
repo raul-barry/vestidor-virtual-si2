@@ -34,6 +34,8 @@ export class ProductCardComponent {
   }
 
   openProduct(): void {
-    void this.router.navigate(['/catalog/product', this.producto.id_producto]);
+    void this.router.navigate(['/catalog/product', this.producto.id_producto], {
+      queryParams: this.router.parseUrl(this.router.url).queryParams
+    });
   }
 }

@@ -49,7 +49,7 @@ class ApiClient {
                     .map((e) => e is Map ? e['msg'] ?? 'Dato inválido' : '$e')
                     .join('\n')
                 : 'No se pudo completar la operación (${response.statusCode}).';
-        throw ApiException(response.statusCode, message);
+        throw ApiException(response.statusCode, message, data: data);
       }
       if (data == null && response.bodyBytes.isNotEmpty) {
         throw ApiException(0, 'El servidor no devolvió una respuesta válida.');
@@ -65,17 +65,31 @@ class ApiClient {
   }
 
   Future<dynamic> multipart(String path, Map<String, String> fields,
-      List<int> bytes, String filename, String mimeType) async {
+      List<int> bytes, String filename, String mimeType,
+      {Duration? requestTimeout}) async {
     final sentToken = token;
     final request = http.MultipartRequest('POST', resolve(path));
     if (sentToken != null) request.headers['Authorization'] = 'Bearer $sentToken';
     request.fields.addAll(fields);
     request.files.add(http.MultipartFile.fromBytes('photo', bytes,
         filename: filename, contentType: MediaType.parse(mimeType)));
-    final response = await http.Response.fromStream(
-        await _client.send(request).timeout(timeout));
+    late final http.Response response;
+    try {
+      response = await http.Response.fromStream(
+          await _client.send(request).timeout(requestTimeout ?? timeout));
+    } on TimeoutException {
+      throw ApiException(0,
+          'El probador virtual tardó demasiado. Intenta con una foto más ligera.');
+    } on http.ClientException {
+      throw ApiException(0,
+          'No se pudo enviar la fotografía. Comprueba la conexión a internet.');
+    }
     dynamic data;
-    try { data = jsonDecode(utf8.decode(response.bodyBytes)); } on FormatException {}
+      try {
+        data = jsonDecode(utf8.decode(response.bodyBytes));
+      } on FormatException {
+        data = null; // Preserve the HTTP status for non-JSON gateway responses.
+      }
     if (response.statusCode == 401 &&
         sentToken != null &&
         sentToken == token) {
@@ -83,7 +97,7 @@ class ApiClient {
     }
     if (response.statusCode >= 400) {
       final detail = data is Map ? data['detail'] ?? data['message'] : null;
-      throw ApiException(response.statusCode, detail is String ? detail : 'No se pudo generar la prueba virtual.');
+      throw ApiException(response.statusCode, detail is String ? detail : 'No se pudo generar la prueba virtual.', data: data);
     }
     if (data is! Map) throw ApiException(0, 'El servidor no devolvió una prueba válida.');
     return data;
@@ -93,9 +107,10 @@ class ApiClient {
 }
 
 class ApiException implements Exception {
-  ApiException(this.status, this.message);
+  ApiException(this.status, this.message, {this.data});
   final int status;
   final String message;
+  final dynamic data;
   @override
   String toString() => message;
 }

@@ -19,22 +19,7 @@ export const adminGuard: CanActivateFn = () => {
   const token = inject(TokenService).getToken();
   const router = inject(Router);
   
-  let rol: string | null = null;
-  const userStr = localStorage.getItem('vestidor_virtual_user');
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      rol = user.rol;
-    } catch {
-      // Ignorar error de parseo
-    }
-  }
-  
-  if (!rol) {
-    rol = getRoleFromToken(token ?? '');
-  }
-  
-  rol = rol?.trim().toUpperCase() ?? null;
+  const rol = getRoleFromToken(token ?? '')?.trim().toUpperCase() ?? null;
   const resultado = !!token && rol === 'ADMINISTRADOR';
 
 

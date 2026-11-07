@@ -5,11 +5,13 @@ import { TokenService } from './core/services/token.service';
 import { NavbarComponent } from './shared/components/navbar/navbar.component';
 import { AdminSidebarComponent } from './features/admin/components/admin-sidebar/admin-sidebar.component';
 import { isStaff, normalizeRole } from './shared/navigation/navigation.config';
+import { OutboxStatusComponent } from './shared/components/outbox-status.component';
 @Component({
-  selector: 'app-root', standalone: true, imports: [RouterOutlet, NavbarComponent, AdminSidebarComponent],
+  selector: 'app-root', standalone: true, imports: [RouterOutlet, NavbarComponent, AdminSidebarComponent, OutboxStatusComponent],
   template: `
     <a class="skip-link" href="#page-content">Saltar al contenido</a>
     <app-navbar [signedIn]="auth.hasSession()" [staff]="staff" [role]="role" [expanded]="menuOpen" [authPage]="authPage" (toggleMenu)="menuOpen = !menuOpen" (signOut)="logout()" />
+    <app-outbox-status />
     <div class="application-shell" [class.workspace]="staff">
       @if (staff) {
         <aside id="workspace-navigation" class="workspace-navigation" [class.mobile-open]="menuOpen" (keydown.escape)="closeMenu()">

@@ -1,9 +1,10 @@
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database.seed import seed_initial_data
 from app.main import app
 from app.models.inventario import Inventario
+from app.models.movimiento_inventario import MovimientoInventario
 
 
 def login(client, role):
@@ -32,7 +33,15 @@ def test_reservation_full_flow_and_permissions(db):
     assert client.put(path, headers=customer, json={"estado": "CONFIRMADA"}).status_code == 403
     assert client.put(path, headers=staff, json={"estado": "CONFIRMADA"}).status_code == 200
     assert client.put(path, headers=customer, json={"estado": "CANCELADA"}).status_code == 200
-    assert client.put(path, headers=customer, json={"estado": "CANCELADA"}).status_code == 409
+    repeated = client.put(path, headers=customer, json={"estado": "CANCELADA"})
+    assert repeated.status_code == 200
+    assert repeated.json()["estado"] == "CANCELADA"
+    db.refresh(inv)
+    assert inv.stock_disponible == original
+    assert inv.stock_reservado == 0
+    assert db.scalar(select(func.count()).select_from(MovimientoInventario).where(
+        MovimientoInventario.tipo_movimiento == "LIBERACION_RESERVA"
+    )) == 1
     db.refresh(inv)
     assert (inv.stock_disponible, inv.stock_reservado) == (original, 0)
     assert client.post("/api/reservations", headers=customer, json={**payload, "cantidad": original + 1}).status_code == 409

@@ -7,6 +7,7 @@ from app.models.comercio import Ciudad
 from sqlalchemy import select
 from app.repositories.branch_admin_repository import BranchRepository
 from app.schemas.branch_admin import BranchAdminResponse, CreateBranchRequest, UpdateBranchRequest
+from app.services.plan_access_service import PlanAccessService
 
 
 class BranchAdminService:
@@ -23,6 +24,7 @@ class BranchAdminService:
         return self._to_response(sucursal)
 
     def create(self, request: CreateBranchRequest) -> BranchAdminResponse:
+        PlanAccessService(self.repository.db).require_branch_capacity()
         if self.repository.get_by_name(request.nombre):
             raise AppException("Ya existe una sucursal con ese nombre", status_code=409)
         try:
@@ -64,6 +66,8 @@ class BranchAdminService:
             raise AppException("Sucursal no encontrada", status_code=404)
         new_status = "INACTIVA" if sucursal.estado == "ACTIVA" else "ACTIVA"
         try:
+            if new_status == "ACTIVA":
+                PlanAccessService(self.repository.db).require_branch_capacity()
             sucursal = self.repository.update(sucursal, estado=new_status)
             self.repository.db.commit()
             return self._to_response(sucursal)

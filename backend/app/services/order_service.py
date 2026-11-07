@@ -55,6 +55,7 @@ class OrderService:
                     item.id_variante,
                     item.cantidad,
                     item.precio_unitario,
+                    item.id_reserva,
                 )
             self.repository.finalize_cart(cart)
             self.repository.db.commit()

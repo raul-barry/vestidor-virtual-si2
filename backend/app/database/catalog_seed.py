@@ -9,6 +9,7 @@ from app.models.categoria import Categoria
 from app.models.color import Color
 from app.models.sucursal import Sucursal
 from app.models.talla import Talla
+from app.models.organizacion import Organizacion
 
 INITIAL_CATEGORIES = ("Camisas", "Pantalones", "Chaquetas", "Poleras", "Zapatos")
 INITIAL_SIZES = ("XS", "S", "M", "L", "XL", "XXL")
@@ -30,6 +31,10 @@ def _seed_named_records(db: Session, model, names: Iterable[str]) -> int:
 
 
 def seed_catalog_data(db: Session) -> dict[str, int]:
+    organization = db.scalar(select(Organizacion).where(Organizacion.slug == "fashionstore"))
+    if organization is None:
+        raise RuntimeError("Ejecute las migraciones antes de cargar el catálogo")
+    db.info["organization_id"] = organization.id_organizacion
     created = {
         "categorias": _seed_named_records(db, Categoria, INITIAL_CATEGORIES),
         "tallas": _seed_named_records(db, Talla, INITIAL_SIZES),

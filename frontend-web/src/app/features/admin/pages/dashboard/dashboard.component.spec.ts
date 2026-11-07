@@ -11,7 +11,8 @@ describe('DashboardComponent', () => {
 
   beforeEach(async () => {
     reportService = jasmine.createSpyObj<AdminReportService>('AdminReportService', [
-      'getDashboard', 'getSales', 'getTopProducts', 'getTopCategories', 'getInventory', 'getCustomers'
+      'getDashboard', 'getSales', 'getTopProducts', 'getTopCategories', 'getInventory', 'getCustomers',
+      'getPredictiveFeatures', 'getBranches'
     ]);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
     reportService.getDashboard.and.returnValue(of({ usuarios_totales: 12, clientes_totales: 10, productos_totales: 24, pedidos_totales: 8, ventas_totales: '1500.00', productos_stock_bajo: 2 }));
@@ -20,6 +21,13 @@ describe('DashboardComponent', () => {
     reportService.getTopCategories.and.returnValue(of([{ categoria: 'Camisas', cantidad_vendida: 8, ventas_generadas: '1500.00' }]));
     reportService.getInventory.and.returnValue(of({ stock_total: 80, productos_stock_bajo: 2, productos_sin_stock: 0, movimientos_recientes: [] }));
     reportService.getCustomers.and.returnValue(of({ usuarios_registrados: 12, clientes_activos: 10, clientes_nuevos_mes: 2, clientes_con_compras: 8 }));
+    reportService.getPredictiveFeatures.and.returnValue(of({
+      machine_learning: false,
+      prediccion_demanda: false,
+      segmentacion_kmeans: false,
+      dashboard_predictivo: false,
+    }));
+    reportService.getBranches.and.returnValue(of([]));
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
       providers: [

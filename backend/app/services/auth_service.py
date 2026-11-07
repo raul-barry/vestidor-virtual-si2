@@ -37,7 +37,7 @@ class AuthService:
         )
         return self.repository.create(usuario)
 
-    def register_client(self, request: RegisterRequest) -> Usuario:
+    def register_client(self, request: RegisterRequest, id_organizacion: int) -> Usuario:
         if self.repository.get_by_email(request.correo):
             raise AppException("El correo ya está registrado", status_code=400)
 
@@ -46,6 +46,7 @@ class AuthService:
             raise AppException("El rol CLIENTE no está configurado", status_code=500)
 
         usuario = Usuario(
+            id_organizacion=id_organizacion,
             id_rol=client_role.id_rol,
             nombres=request.nombres,
             apellidos=request.apellidos,
@@ -76,8 +77,14 @@ class AuthService:
 
         now = datetime.now(timezone.utc)
         expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
+        organization = usuario.organizacion
+        is_platform_admin = usuario.rol.nombre == "ADMINISTRADOR_PLATAFORMA"
+        if is_platform_admin and usuario.id_organizacion is not None:
+            raise AppException("El administrador de plataforma debe ser global", status_code=403)
+        if not is_platform_admin and (organization is None or organization.estado.upper() != "ACTIVA"):
+            raise AppException("Organización inactiva", status_code=403)
         token = create_access_token(
-            {"id_usuario": usuario.id_usuario, "rol": usuario.rol.nombre},
+            {"id_usuario": usuario.id_usuario, "id_organizacion": None if is_platform_admin else usuario.id_organizacion, "rol": usuario.rol.nombre},
             expires_delta=expires_delta,
         )
 

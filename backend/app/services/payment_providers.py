@@ -49,6 +49,29 @@ class StripeCardPaymentProvider:
             raise PaymentProviderError("No se pudo recuperar el intento de pago") from exc
         return {"id": intent.id, "client_secret": intent.client_secret, "status": intent.status}
 
+    def refund_intent(self, reference: str, amount: Decimal, operation_uuid: str) -> dict[str, Any]:
+        try:
+            refund = self.stripe.Refund.create(
+                payment_intent=reference,
+                amount=self.amount_in_minor_units(amount),
+                idempotency_key=f"fashionstore-refund-{operation_uuid}",
+            )
+        except Exception as exc:
+            raise PaymentProviderError("No se pudo solicitar el reembolso en Stripe") from exc
+        return {"id": refund.id, "status": refund.status}
+
+    def create_exchange_intent(self, amount: Decimal, currency: str, exchange_id: int, operation_uuid: str) -> dict[str, Any]:
+        try:
+            intent = self.stripe.PaymentIntent.create(
+                amount=self.amount_in_minor_units(amount), currency=currency.lower(),
+                automatic_payment_methods={"enabled": True},
+                metadata={"exchange_id": str(exchange_id), "operation_uuid": operation_uuid},
+                idempotency_key=f"fashionstore-exchange-charge-{operation_uuid}",
+            )
+        except Exception as exc:
+            raise PaymentProviderError("No se pudo crear la autorización para el cambio") from exc
+        return {"id": intent.id, "client_secret": intent.client_secret, "status": intent.status}
+
 
 class SimulatedStripeCardPaymentProvider:
     """Stripe-shaped adapter used only by the local/demo payment flow."""

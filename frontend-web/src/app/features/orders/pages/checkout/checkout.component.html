@@ -1,6 +1,6 @@
-<main class="checkout-page">
+﻿<main class="checkout-page">
   <header class="checkout-header">
-    <p>CONFIRMACIÓN</p>
+    <p>CONFIRMACIÃ“N</p>
     <h1>Revisa tu compra</h1>
   </header>
 
@@ -9,6 +9,24 @@
       <mat-spinner diameter="42"></mat-spinner>
       <span>Cargando resumen...</span>
     </div>
+  } @else if (createdOfflineOrder) {
+    <mat-card class="success-card">
+      <mat-card-content>
+        <p>Comprobante provisional</p>
+        <h2>Venta local {{ createdOfflineOrder.numero_local }}</h2>
+        <span>Estado: {{ createdOfflineOrder.estado_sync }} Â· Pago {{ createdOfflineOrder.estado_pago }}</span>
+        @for (item of createdOfflineOrder.detalles; track item['client_line_id']) {
+          <div class="summary-item"><span>{{ item['producto'] }} Â· {{ item['cantidad'] }} Ã— Bs {{ item['precio_unitario'] }}</span><span>{{ item['estado_sync'] }}</span></div>
+        }
+        <strong>{{ createdOfflineOrder.total | currency:'BOB':'symbol-narrow':'1.2-2' }}</strong>
+        <p>{{ createdOfflineOrder.mensaje_sync }}</p>
+        <button mat-flat-button color="primary" type="button" (click)="syncOfflineSale()">Sincronizar ahora</button>
+        @if (createdOfflineOrder.id_pedido && createdOfflineOrder.estado_pago !== 'PAGADO' && createdOfflineOrder.estado_pago !== 'CONFIRMADO') {
+          <button mat-stroked-button type="button" (click)="payOfflineOrder()">Continuar autorización del pago</button>
+          <p>La solicitud está pendiente. El banco todavía no confirmó ningún cobro.</p>
+        }
+      </mat-card-content>
+    </mat-card>
   } @else if (createdOrder) {
     <mat-card class="success-card">
       <mat-card-content>
@@ -20,7 +38,7 @@
       </mat-card-content>
     </mat-card>
   } @else if (cart?.items?.length === 0) {
-    <mat-card class="empty-state">Tu carrito está vacío. Agrega productos antes de crear un pedido.</mat-card>
+    <mat-card class="empty-state">Tu carrito estÃ¡ vacÃ­o. Agrega productos antes de crear un pedido.</mat-card>
   } @else if (cart) {
     <section class="checkout-layout">
       <mat-card class="summary-card">
@@ -28,7 +46,7 @@
         <mat-card-content>
           @for (item of cart.items; track item.id_detalle) {
             <div class="summary-item">
-              <span>{{ item.producto }} · {{ item.talla }} · {{ item.color }}</span>
+              <span>{{ item.producto }} Â· {{ item.talla }} Â· {{ item.color }}</span>
               <span>{{ item.cantidad }} x {{ item.precio_unitario | currency:'BOB':'symbol-narrow':'1.2-2' }}</span>
             </div>
           }
@@ -42,15 +60,20 @@
           <form [formGroup]="deliveryForm">
             <mat-form-field appearance="outline"><mat-label>Entrega</mat-label><mat-select formControlName="tipo_entrega"><mat-option value="RECOJO_SUCURSAL">Recojo en sucursal</mat-option><mat-option value="DELIVERY">Delivery</mat-option></mat-select></mat-form-field>
             @if (!isDelivery) {
-              <mat-form-field appearance="outline"><mat-label>Sucursal de recojo</mat-label><mat-select formControlName="id_sucursal_entrega"><mat-option [value]="0">Selecciona una sucursal</mat-option>@for (branch of branches; track branch.id_sucursal) { <mat-option [value]="branch.id_sucursal">{{ branch.nombre }} — {{ branch.direccion }}</mat-option> }</mat-select></mat-form-field>
+              <mat-form-field appearance="outline"><mat-label>Sucursal de recojo</mat-label><mat-select formControlName="id_sucursal_entrega"><mat-option [value]="0">Selecciona una sucursal</mat-option>@for (branch of branches; track branch.id_sucursal) { <mat-option [value]="branch.id_sucursal">{{ branch.nombre }} â€” {{ branch.direccion }}</mat-option> }</mat-select></mat-form-field>
             } @else {
-              <mat-form-field appearance="outline"><mat-label>Dirección</mat-label><input matInput formControlName="direccion_entrega" /></mat-form-field>
+              <mat-form-field appearance="outline"><mat-label>DirecciÃ³n</mat-label><input matInput formControlName="direccion_entrega" /></mat-form-field>
               <mat-form-field appearance="outline"><mat-label>Referencia (opcional)</mat-label><input matInput formControlName="referencia_entrega" /></mat-form-field>
-              <mat-form-field appearance="outline"><mat-label>Teléfono</mat-label><input matInput formControlName="telefono_entrega" /></mat-form-field>
+              <mat-form-field appearance="outline"><mat-label>TelÃ©fono</mat-label><input matInput formControlName="telefono_entrega" /></mat-form-field>
             }
           </form>
+          <form [formGroup]="deliveryForm">
+            <mat-form-field appearance="outline"><mat-label>Método de pago para venta offline</mat-label><mat-select formControlName="metodo_pago"><mat-option value="EFECTIVO">Efectivo</mat-option><mat-option value="TARJETA">Tarjeta (pendiente de confirmación)</mat-option><mat-option value="QR">QR (pendiente de verificación)</mat-option></mat-select></mat-form-field>
+            @if (deliveryForm.controls.metodo_pago.value === 'EFECTIVO') { <mat-form-field appearance="outline"><mat-label>Importe recibido (Bs)</mat-label><input matInput type="number" formControlName="importe_recibido" /></mat-form-field> }
+          </form>
+          @if (offlineCart || !isOnline) { <p role="status">Modo offline: disponibilidad y precio provisionales. El servidor confirma la venta al sincronizar.</p> }
           <button mat-flat-button color="primary" type="button" [disabled]="isSubmitting" (click)="createOrder()">
-            {{ isSubmitting ? 'Creando pedido...' : 'Crear pedido' }}
+            {{ isSubmitting ? 'Guardando...' : offlineCart || !isOnline ? 'Registrar venta offline' : 'Crear pedido' }}
           </button>
         </mat-card-content>
       </mat-card>

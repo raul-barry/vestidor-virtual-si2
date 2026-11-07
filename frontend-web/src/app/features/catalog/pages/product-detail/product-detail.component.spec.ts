@@ -7,6 +7,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { CatalogService } from '../../services/catalog.service';
+import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 import { CartService } from '../../../cart/services/cart.service';
 import { ProductDetailComponent } from './product-detail.component';
 
@@ -23,6 +24,7 @@ describe('ProductDetailComponent', () => {
       'getProductAvailability',
       'getProducts'
     ]);
+    Object.defineProperty(catalogService, 'canLoadCatalog', { get: () => true });
     cartService = jasmine.createSpyObj<CartService>('CartService', ['addItem']);
     snackBar = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
 
@@ -33,6 +35,7 @@ describe('ProductDetailComponent', () => {
         { provide: AuthService, useValue: { hasSession: () => false } },
         { provide: CatalogService, useValue: catalogService },
         { provide: CartService, useValue: cartService },
+        { provide: OutboxSyncService, useValue: { cachedVariantStock: async () => [], cacheVariantStock: async () => {}, addOfflineCartItem: async () => ({}) } },
         { provide: MatSnackBar, useValue: snackBar },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '1' }) } } }
       ]

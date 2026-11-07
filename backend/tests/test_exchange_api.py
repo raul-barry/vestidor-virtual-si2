@@ -1,0 +1,261 @@
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+
+from app.database.seed import seed_initial_data
+from app.main import app
+from app.models.exchange import ExchangeInventoryIncident, GarmentExchange, OrganizationHoliday
+from app.models.inventario import Inventario
+from app.models.movimiento_inventario import MovimientoInventario
+from app.models.pago import Pago
+from app.models.pedido import Pedido
+from app.models.pedido_detalle import PedidoDetalle
+from app.models.producto import Producto
+from app.models.producto_variante import ProductoVariante
+from app.models.sucursal import Sucursal
+from app.models.usuario import Usuario
+from app.services.exchange_service import business_days_open
+from app.services.pricing_service import current_price
+from conftest import session_token
+
+
+def _headers(db, email, role):
+    user = db.scalar(select(Usuario).where(Usuario.correo == email))
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role})
+    return user, {"Authorization": f"Bearer {token}"}
+
+
+def _setup(db):
+    seed_initial_data(db)
+    db.commit()
+    customer, customer_headers = _headers(db, "cliente@vestidor.local", "CLIENTE")
+    manager, manager_headers = _headers(db, "encargado@vestidor.local", "ENCARGADO_SUCURSAL")
+    admin, admin_headers = _headers(db, "admin@vestidor.local", "ADMINISTRADOR")
+    original = db.scalar(select(ProductoVariante).order_by(ProductoVariante.id_variante))
+    original_inventory = db.scalar(select(Inventario).where(Inventario.id_variante == original.id_variante).order_by(Inventario.id_inventario))
+    replacement = db.scalar(select(ProductoVariante).join(Producto).where(
+        Producto.id_categoria == original.producto.id_categoria,
+        Producto.id_producto != original.producto.id_producto,
+    ).order_by(ProductoVariante.id_variante))
+    replacement_inventory = db.scalar(select(Inventario).where(
+        Inventario.id_variante == replacement.id_variante,
+        Inventario.id_sucursal == original_inventory.id_sucursal,
+    ))
+    paid_price = current_price(db, original.producto)
+    order = Pedido(id_cliente=customer.cliente.id_cliente, fecha_pedido=datetime.now(timezone.utc) - timedelta(days=10),
+        fecha_entrega=datetime.now(timezone.utc) - timedelta(days=1), estado="ENTREGADO",
+        total=paid_price)
+    db.add(order)
+    db.flush()
+    detail = PedidoDetalle(id_pedido=order.id_pedido, id_variante=original.id_variante,
+        cantidad=1, precio_unitario=paid_price)
+    db.add(detail)
+    db.add(Pago(id_pedido=order.id_pedido, metodo_pago="EFECTIVO", monto=paid_price, estado="PAGADO"))
+    db.commit()
+    return (TestClient(app), customer, customer_headers, manager, manager_headers,
+            admin, admin_headers, original, original_inventory, replacement,
+            replacement_inventory, order, detail)
+
+
+def test_business_day_window_excludes_weekends_and_configured_holidays(db):
+    seed_initial_data(db)
+    today = datetime.now(timezone.utc).date()
+    delivered = today - timedelta(days=16)
+    before = business_days_open(db, 1, delivered, today)
+    holiday = delivered + timedelta(days=1)
+    while holiday.weekday() >= 5:
+        holiday += timedelta(days=1)
+    db.add(OrganizationHoliday(organization_id=1, holiday_date=holiday, name="Feriado de prueba"))
+    db.flush()
+    assert business_days_open(db, 1, delivered, today) == before - 1
+
+
+def test_request_rejects_other_category_and_inspection_delivers_without_new_sale(db):
+    (client, _, customer_headers, _, manager_headers, _, _, original,
+     original_inventory, replacement, _, order, detail) = _setup(db)
+    other_category = db.scalar(select(ProductoVariante).join(Producto).where(
+        Producto.id_categoria != original.producto.id_categoria,
+    ).order_by(ProductoVariante.id_variante))
+    assert other_category is not None
+    invalid = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": original_inventory.id_sucursal,
+        "id_variante_sustituta": other_category.id_variante, "motivo": "Cambio de talla",
+    })
+    assert invalid.status_code == 422
+
+    request = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": original_inventory.id_sucursal,
+        "id_variante_sustituta": original.id_variante, "motivo": "Cambio de talla",
+    })
+    assert request.status_code == 201, request.text
+    exchange_id = request.json()["id"]
+    before = original_inventory.stock_disponible
+    inspection = client.post(f"/api/admin/exchanges/{exchange_id}/inspection", headers=manager_headers, json={
+        "aprobado": True, "buen_estado": True, "etiqueta_original": True,
+        "id_variante_sustituta": original.id_variante,
+        "id_sucursal_sustituta": original_inventory.id_sucursal,
+    })
+    assert inspection.status_code == 200, inspection.text
+    assert inspection.json()["state"] == "APROBADO"
+    db.refresh(original_inventory)
+    assert original_inventory.stock_disponible == before + 1
+    delivered = client.post(f"/api/admin/exchanges/{exchange_id}/deliver", headers=manager_headers, json={})
+    assert delivered.status_code == 200, delivered.text
+    assert delivered.json()["state"] == "COMPLETADO"
+    db.refresh(original_inventory)
+    assert original_inventory.stock_disponible == before
+    assert db.scalar(select(func.count()).select_from(Pedido)) == 1
+    assert db.scalar(select(func.count()).select_from(MovimientoInventario).where(
+        MovimientoInventario.motivo.like(f"%cambio {exchange_id}%"))) == 2
+
+
+def test_offline_physical_shortage_is_idempotent_and_never_makes_stock_negative(db):
+    (client, customer, _, manager, manager_headers, _, _, original,
+     original_inventory, replacement, replacement_inventory, order, detail) = _setup(db)
+    replacement_inventory.stock_disponible = 0
+    original_before = original_inventory.stock_disponible
+    db.commit()
+    operation_uuid = str(uuid4())
+    operation = {
+        "operation_uuid": operation_uuid, "operation_type": "cambio.registrar_offline",
+        "payload": {"id_usuario": manager.id_usuario, "id_detalle": detail.id_detalle,
+            "id_sucursal": original_inventory.id_sucursal,
+            "id_variante_sustituta": replacement.id_variante,
+            "prenda_recibida": True, "prenda_entregada": True,
+            "buen_estado": True, "etiqueta_original": True, "motivo": "Cambio físico offline"},
+        "created_at": datetime.now(timezone.utc).isoformat(), "schema_version": 1,
+        "client_id": "staff-device", "tenant_scope": f"org:{manager.id_organizacion}",
+    }
+    first = client.post("/api/sync/batch", headers=manager_headers, json={"operations": [operation]})
+    replay = client.post("/api/sync/batch", headers=manager_headers, json={"operations": [operation]})
+    assert first.status_code == replay.status_code == 200
+    result = first.json()["results"][0]
+    assert result["status"] == "SINCRONIZADA"
+    assert result["result"]["state"] == "INCIDENCIA_CONCILIACION"
+    assert replay.json()["results"][0]["duplicate"] is True
+    db.refresh(original_inventory)
+    db.refresh(replacement_inventory)
+    assert original_inventory.stock_disponible == original_before + 1
+    assert replacement_inventory.stock_disponible == 0
+    assert db.scalar(select(func.count()).select_from(ExchangeInventoryIncident)) == 1
+    assert db.scalar(select(func.count()).select_from(GarmentExchange)) == 1
+
+    incidents = client.get("/api/admin/exchanges/incidents", headers=manager_headers)
+    assert incidents.status_code == 200 and incidents.json()[0]["direction"] == "SALIDA_FISICA"
+    reconcile = client.post(f"/api/admin/exchanges/incidents/{incidents.json()[0]['id']}/reconcile",
+        headers=_headers(db, "admin@vestidor.local", "ADMINISTRADOR")[1],
+        json={"stock_real": 0, "motivo": "Conteo físico confirmó cero"})
+    assert reconcile.status_code == 200, reconcile.text
+    assert reconcile.json()["state"] == "CONCILIADA"
+
+
+def test_positive_difference_cannot_be_delivered_without_real_payment_confirmation(db):
+    (client, _, customer_headers, _, manager_headers, _, _, original,
+     original_inventory, _, _, order, detail) = _setup(db)
+    detail.precio_unitario = Decimal("1.00")
+    order.total = Decimal("1.00")
+    db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido)).monto = Decimal("1.00")
+    db.commit()
+    request = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": original_inventory.id_sucursal,
+        "id_variante_sustituta": original.id_variante, "motivo": "Cambio de talla",
+    })
+    assert request.status_code == 201
+    exchange_id = request.json()["id"]
+    inspection = client.post(f"/api/admin/exchanges/{exchange_id}/inspection", headers=manager_headers, json={
+        "aprobado": True, "buen_estado": True, "etiqueta_original": True,
+        "id_variante_sustituta": original.id_variante,
+    })
+    assert inspection.status_code == 200
+    assert inspection.json()["state"] == "PENDIENTE_COBRO"
+    assert Decimal(inspection.json()["economic_difference"]) > 0
+    blocked_delivery = client.post(f"/api/admin/exchanges/{exchange_id}/deliver", headers=manager_headers, json={})
+    assert blocked_delivery.status_code == 409
+
+
+def test_cheaper_replacement_records_refund_pending_and_does_not_fake_completion(db):
+    (client, _, customer_headers, _, manager_headers, _, _, original,
+     original_inventory, replacement, _, order, detail) = _setup(db)
+    detail.precio_unitario = Decimal("500.00")
+    order.total = Decimal("500.00")
+    db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido)).monto = Decimal("500.00")
+    db.commit()
+    request = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": original_inventory.id_sucursal,
+        "id_variante_sustituta": replacement.id_variante, "motivo": "Prefiere otro modelo",
+    })
+    assert request.status_code == 201
+    exchange_id = request.json()["id"]
+    inspection = client.post(f"/api/admin/exchanges/{exchange_id}/inspection", headers=manager_headers, json={
+        "aprobado": True, "buen_estado": True, "etiqueta_original": True,
+        "id_variante_sustituta": replacement.id_variante,
+    })
+    assert inspection.status_code == 200
+    assert Decimal(inspection.json()["economic_difference"]) < 0
+    assert inspection.json()["financial_state"] == "PENDIENTE_DEVOLUCION"
+    delivered = client.post(f"/api/admin/exchanges/{exchange_id}/deliver", headers=manager_headers, json={})
+    assert delivered.status_code == 200
+    assert delivered.json()["state"] == "PENDIENTE_DEVOLUCION"
+    assert delivered.json()["state"] != "COMPLETADO"
+
+
+def test_cu29_refund_is_server_priced_idempotent_and_requires_transfer_evidence(db):
+    from app.models.payment_refund import PaymentRefund
+
+    (client, _, customer_headers, _, manager_headers, _, admin_headers, original,
+     original_inventory, replacement, _, order, detail) = _setup(db)
+    detail.precio_unitario = Decimal("500.00")
+    order.total = Decimal("500.00")
+    payment = db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido))
+    payment.monto = Decimal("500.00")
+    db.commit()
+    request = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": original_inventory.id_sucursal,
+        "id_variante_sustituta": replacement.id_variante, "motivo": "Cambio de modelo",
+    })
+    exchange_id = request.json()["id"]
+    inspection = client.post(f"/api/admin/exchanges/{exchange_id}/inspection", headers=manager_headers, json={
+        "aprobado": True, "buen_estado": True, "etiqueta_original": True,
+        "id_variante_sustituta": replacement.id_variante,
+    })
+    assert inspection.status_code == 200
+    operation_uuid = str(uuid4())
+    body = {"operation_uuid": operation_uuid, "payment_id": payment.id_pago,
+            "exchange_id": exchange_id, "method": "TRANSFERENCIA", "reason": "Diferencia CU29"}
+
+    created = client.post("/api/payments/refunds", headers=admin_headers, json=body)
+    replay = client.post("/api/payments/refunds", headers=admin_headers, json=body)
+
+    assert created.status_code == replay.status_code == 201
+    assert created.json()["id"] == replay.json()["id"]
+    assert Decimal(created.json()["amount"]) == abs(Decimal(inspection.json()["economic_difference"]))
+    assert created.json()["state"] == "DEVOLUCION_PENDIENTE"
+    assert db.scalar(select(func.count()).select_from(PaymentRefund)) == 1
+    completed = client.post(f"/api/payments/refunds/{created.json()['id']}/evidence",
+                            headers=admin_headers, json={"evidence_reference": "TRANSFER-RECEIPT-1"})
+    assert completed.status_code == 200
+    assert completed.json()["state"] == "DEVOLUCION_COMPLETADA"
+    assert client.post(f"/api/payments/refunds/{created.json()['id']}/evidence",
+                       headers=admin_headers, json={"evidence_reference": "TRANSFER-RECEIPT-1"}).status_code == 200
+
+
+def test_organization_branch_and_holiday_data_are_tenant_scoped(db):
+    (client, customer, customer_headers, _, _, _, _, original,
+     original_inventory, _, _, _, detail) = _setup(db)
+    db.info.pop("organization_id", None)
+    foreign = Sucursal(id_organizacion=2, nombre="Sucursal ajena", direccion="Otra empresa", estado="ACTIVA")
+    from app.models.organizacion import Organizacion
+    db.add(Organizacion(id_organizacion=2, nombre="Otra organización", slug="otra", estado="ACTIVA"))
+    db.flush()
+    db.add(foreign)
+    db.commit()
+    db.info["organization_id"] = customer.id_organizacion
+    response = client.post("/api/exchanges", headers=customer_headers, json={
+        "id_detalle": detail.id_detalle, "id_sucursal": foreign.id_sucursal,
+        "id_variante_sustituta": original.id_variante, "motivo": "Cambio de talla",
+    })
+    assert response.status_code == 422
+    assert client.get("/api/admin/exchanges/holidays", headers=customer_headers).status_code == 403

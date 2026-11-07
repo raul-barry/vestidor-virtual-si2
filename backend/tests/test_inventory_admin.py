@@ -137,6 +137,7 @@ def test_history_and_duplicate_branch_variant_restriction(db) -> None:
     assert history.status_code == 200
     assert [movement["tipo"] for movement in history.json()] == ["ENTRADA", "AJUSTE"]
     assert history.json()[0]["usuario"] == "Admin User"
+    assert [movement["motivo"] for movement in history.json()] == ["Nueva compra", "Stock inicial"]
 
 
 def test_customer_cannot_access_inventory_administration(db) -> None:

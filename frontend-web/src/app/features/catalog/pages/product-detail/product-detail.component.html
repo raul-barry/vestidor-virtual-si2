@@ -1,6 +1,8 @@
 <main class="detail-page">
   <app-back-link [to]="['/catalog']" label="Volver al catálogo" />
-  @if (isLoading) {
+  @if (!hasCatalogContext) {
+    <mat-card>Abre un enlace de tienda o selecciona una tienda antes de consultar este producto.</mat-card>
+  } @else if (isLoading) {
     <div class="loading-state">
       <mat-spinner diameter="42"></mat-spinner>
       <span>Cargando producto...</span>
@@ -14,7 +16,7 @@
     <section class="detail-grid">
       <section class="detail-visual" aria-label="Galería de producto">
         <div class="gallery-main"><img [src]="imageUrl" [alt]="variants.nombre_producto" (error)="useFallbackImage($event)" /></div>
-        <div class="gallery-notes"><span>FASHION STORE · VESTIDOR 3D</span><span>Disponibilidad en tiempo real</span></div>
+        <div class="gallery-notes"><span>FASHION STORE · VESTIDOR 3D</span><span>{{ offline ? 'Modo offline · disponibilidad de la última descarga' : 'Disponibilidad en tiempo real' }}</span></div>
       </section>
       <mat-card class="purchase-card">
         <mat-card-header><mat-card-title>Tallas y colores</mat-card-title></mat-card-header>

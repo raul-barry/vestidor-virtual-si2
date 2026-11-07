@@ -8,11 +8,12 @@ import { SalesChartComponent } from '../../components/sales-chart/sales-chart.co
 import { TopProductsChartComponent } from '../../components/top-products-chart/top-products-chart.component';
 import { CategoryRanking, DashboardReport, ProductRanking, SalesReport } from '../../models/report.model';
 import { AdminReportService } from '../../services/admin-report.service';
+import { PredictiveDashboardComponent } from './predictive-dashboard.component';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [MatCardModule, MatProgressSpinnerModule, MatSnackBarModule, SalesChartComponent, TopProductsChartComponent, CategoryChartComponent],
+  imports: [MatCardModule, MatProgressSpinnerModule, MatSnackBarModule, SalesChartComponent, TopProductsChartComponent, CategoryChartComponent, PredictiveDashboardComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })

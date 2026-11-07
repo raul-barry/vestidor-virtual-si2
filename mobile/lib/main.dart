@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'features/client_app.dart';
 import 'services/client_repository.dart';
 import 'services/session_store.dart';
+import 'services/reservation_background_sync.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Stripe.urlScheme = 'flutterstripe';
+  await ReservationBackgroundSync.initialize();
   runApp(const VestidorVirtualApp());
 }
 

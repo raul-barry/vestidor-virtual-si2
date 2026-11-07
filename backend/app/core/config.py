@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 
@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     fashn_api_key: str = ""
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-flash-image"
+    grok_api_key: str = ""
+    grok_model: str = "grok-4.7"
+    groq_api_key: SecretStr = SecretStr("")
+    ai_config_encryption_key: SecretStr = SecretStr("")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

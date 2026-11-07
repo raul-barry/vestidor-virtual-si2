@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:vestidor_virtual_mobile/main.dart';
 import 'package:vestidor_virtual_mobile/services/api_client.dart';
 import 'package:vestidor_virtual_mobile/services/client_repository.dart';
@@ -24,7 +27,7 @@ class FixtureApi {
     final path = r.url.path;
     final body = r.body.isEmpty ? <String, dynamic>{} : jsonDecode(r.body) as Json;
     dynamic result;
-    if (path.endsWith('/login')) { result = {'access_token': jwt(), 'rol': 'CLIENTE'}; }
+    if (path.endsWith('/login')) { result = {'access_token': jwt(organizationId: 1), 'rol': 'CLIENTE'}; }
     else if (path.endsWith('/logout')) { result = {'message': 'ok'}; }
     else if (path == '/api/users/profile') {
       if (r.method == 'PUT') firstName = body['nombres'];
@@ -74,11 +77,28 @@ void main() {
   late FixtureApi backend;
   late ApiClient api;
   late MemorySessionStore store;
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+      (call) async => ['wifi'],
+    );
+    messenger.setMockStreamHandler(
+      const EventChannel('dev.fluttercommunity.plus/connectivity_status'),
+      MockStreamHandler.inline(
+        onListen: (arguments, events) => events.success(['wifi']),
+      ),
+    );
+  });
   Future<void> start(WidgetTester tester, {bool loggedIn = false}) async {
     tester.view.physicalSize = const Size(430, 1100); tester.view.devicePixelRatio = 1;
     addTearDown(() { tester.view.resetPhysicalSize(); tester.view.resetDevicePixelRatio(); });
+    SharedPreferences.setMockInitialValues({});
     backend = FixtureApi(); store = MemorySessionStore();
-    if (loggedIn) store.value = jsonEncode({'token': jwt(), 'server': 'http://localhost:8000'});
+    if (loggedIn) store.value = jsonEncode({'token': jwt(organizationId: 1), 'server': 'http://localhost:8000'});
     api = ApiClient(client: MockClient(backend.respond));
     await tester.pumpWidget(VestidorVirtualApp(repository: ClientRepository(api), sessionStore: store));
     await tester.pumpAndSettle();
@@ -92,6 +112,20 @@ void main() {
     expect(backend.requests, isEmpty);
     await tapText(tester, 'Crear cuenta');
     expect(find.text('Nombres'), findsOneWidget); expect(find.text('Apellidos'), findsOneWidget);
+  });
+  testWidgets('public catalog requires and changes an explicit store slug', (tester) async {
+    await start(tester);
+    expect(backend.requests, isEmpty);
+    await tester.enterText(find.widgetWithText(TextField, 'Slug de tienda para explorar o registrarte'), 'urbanvogue');
+    await tapText(tester, 'Explorar catálogo');
+    expect(find.text('Camisa Oxford'), findsOneWidget);
+    expect(backend.requests.last.url.queryParameters['organization_slug'], 'urbanvogue');
+
+    await tester.enterText(find.widgetWithText(TextField, 'Slug de tienda'), 'elegance-boutique');
+    await tapText(tester, 'Cambiar tienda');
+    expect(backend.requests.last.url.queryParameters['organization_slug'], 'elegance-boutique');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets('login persists session and shows API catalog', (tester) async {
     await start(tester);
@@ -115,7 +149,7 @@ void main() {
     await tapText(tester, 'Crear pedido');
     expect(find.text('Pedido #4'), findsOneWidget);
     expect(backend.requests.where((r) => r.url.path == '/api/orders' && r.method == 'POST'), hasLength(1));
-    await tapText(tester, 'Pagar (demostración)'); await tapText(tester, 'Simular aprobación');
+    await tapText(tester, 'Preparar pago'); await tapText(tester, 'Simular pago realizado');
     expect(backend.orderState, 'CONFIRMADO'); expect(find.text('Estado: CONFIRMADO'), findsOneWidget);
     await tapText(tester, 'Volver a mis pedidos');
     await tapText(tester, 'Pedido #4 · CONFIRMADO');

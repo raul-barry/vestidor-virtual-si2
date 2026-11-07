@@ -13,6 +13,10 @@ from app.schemas.user_admin import UpdateUserAdminRequest
 from app.core.security import hash_password
 
 
+COMPANY_ASSIGNABLE_ROLES = {"ADMINISTRADOR", "CLIENTE", "ENCARGADO_SUCURSAL", "CAJERO"}
+BRANCH_REQUIRED_ROLES = {"ENCARGADO_SUCURSAL", "CAJERO"}
+
+
 class UserAdminService:
     def __init__(self, db: Session) -> None:
         self.repository = UserAdminRepository(db)
@@ -24,6 +28,9 @@ class UserAdminService:
         return self._to_response(self._get_user(id_usuario))
 
     def create_user(self, request: CreateUserAdminRequest, admin_id: int) -> UserAdminResponse:
+        actor = self.repository.get_user_by_id(admin_id)
+        if actor is None:
+            raise AppException("Administrador no encontrado", status_code=403)
         if self.repository.db.scalar(select(Usuario).where(Usuario.correo == request.correo)):
             raise AppException("El correo ya se encuentra registrado", status_code=409)
         role_name = request.rol.upper()
@@ -32,10 +39,16 @@ class UserAdminService:
         role = self.repository.get_role_by_name(role_name)
         if role is None:
             raise AppException("Rol no encontrado", status_code=404)
-        if request.id_sucursal is not None and role_name not in ("ENCARGADO_SUCURSAL", "CAJERO"):
-            raise AppException("La sucursal solo aplica a personal de tienda", status_code=422)
+        if role_name == "ADMINISTRADOR_PLATAFORMA":
+            raise AppException("Solo un administrador de plataforma puede asignar ese rol", status_code=403)
+        if role_name not in COMPANY_ASSIGNABLE_ROLES:
+            raise AppException("Rol no autorizado para usuarios de empresa", status_code=422)
+        if role.estado.upper() != "ACTIVO":
+            raise AppException("No se puede asignar un rol inactivo", status_code=422)
+        self._validate_branch_assignment(role_name, request.id_sucursal)
         try:
             user = self.repository.create_user(Usuario(
+                id_organizacion=actor.id_organizacion,
                 id_rol=role.id_rol,
                 id_sucursal=request.id_sucursal,
                 nombres=request.nombres,
@@ -88,7 +101,10 @@ class UserAdminService:
             existing = self.repository.db.scalar(select(Usuario).where(Usuario.correo == values["correo"]))
             if existing and existing.id_usuario != id_usuario:
                 raise AppException("El correo ya se encuentra registrado", status_code=409)
-        if values.get("id_sucursal") is not None and user.rol.nombre not in ("ENCARGADO_SUCURSAL", "CAJERO"):
+        if user.rol.nombre in BRANCH_REQUIRED_ROLES:
+            if "id_sucursal" in values:
+                self._validate_branch_assignment(user.rol.nombre, values["id_sucursal"])
+        elif values.get("id_sucursal") is not None:
             raise AppException("La sucursal solo aplica a personal de tienda", status_code=422)
         try:
             self.repository.update_user(user, **values)
@@ -99,15 +115,20 @@ class UserAdminService:
             self.repository.db.rollback()
             raise AppException("No se pudo editar el usuario", status_code=500) from exc
 
-    def change_role(self, id_usuario: int, id_rol: int, admin_id: int) -> UserAdminResponse:
+    def change_role(self, id_usuario: int, id_rol: int, admin_id: int, id_sucursal: int | None = None) -> UserAdminResponse:
         if id_usuario == admin_id:
             raise AppException("No se permite cambiar el rol del administrador actual", status_code=422)
         user = self._get_user(id_usuario)
         role = self.repository.get_role_by_id(id_rol)
         if role is None:
             raise AppException("Rol no encontrado", status_code=404)
-        if role.estado != "ACTIVO":
+        if role.estado.upper() != "ACTIVO":
             raise AppException("No se puede asignar un rol inactivo", status_code=422)
+        if role.nombre == "ADMINISTRADOR_PLATAFORMA":
+            raise AppException("Solo un administrador de plataforma puede asignar ese rol", status_code=403)
+        if role.nombre not in COMPANY_ASSIGNABLE_ROLES:
+            raise AppException("Rol no autorizado para usuarios de empresa", status_code=422)
+        self._validate_branch_assignment(role.nombre, id_sucursal)
         if (
             user.rol.nombre == "ADMINISTRADOR"
             and role.nombre != "ADMINISTRADOR"
@@ -119,6 +140,7 @@ class UserAdminService:
         previous_role = user.rol.nombre
         try:
             self.repository.update_user_role(user, role.id_rol)
+            user.id_sucursal = id_sucursal
             if role.nombre == "CLIENTE" and user.cliente is None:
                 self.repository.db.add(Cliente(id_usuario=user.id_usuario, estado="ACTIVO"))
             for session in self.repository.db.scalars(select(Sesion).where(Sesion.id_usuario == id_usuario)).all():
@@ -132,6 +154,16 @@ class UserAdminService:
         except SQLAlchemyError as exc:
             self.repository.db.rollback()
             raise AppException("No se pudo actualizar el rol del usuario", status_code=500) from exc
+
+    def _validate_branch_assignment(self, role_name: str, branch_id: int | None) -> None:
+        if role_name in BRANCH_REQUIRED_ROLES:
+            if branch_id is None:
+                raise AppException("Selecciona una sucursal para este rol", status_code=422)
+            branch = self.repository.get_branch_by_id(branch_id)
+            if branch is None or branch.estado.upper() != "ACTIVA":
+                raise AppException("La sucursal no existe, no pertenece a esta empresa o está inactiva", status_code=422)
+        elif branch_id is not None:
+            raise AppException("La sucursal solo aplica a personal de tienda", status_code=422)
 
     def _get_user(self, id_usuario: int) -> Usuario:
         user = self.repository.get_user_by_id(id_usuario)

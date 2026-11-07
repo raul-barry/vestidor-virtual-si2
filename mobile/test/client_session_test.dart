@@ -12,11 +12,13 @@ void main() {
   late MemorySessionStore store;
   late ClientSession session;
   var role = 'CLIENTE';
+  var organizationId = 1;
   var profileStatus = 200;
   var logoutFails = false;
   final calls = <String>[];
   setUp(() {
     role = 'CLIENTE';
+    organizationId = 1;
     profileStatus = 200;
     logoutFails = false;
     calls.clear();
@@ -25,7 +27,7 @@ void main() {
       calls.add(request.url.path);
       if (request.url.path.endsWith('/login')) {
         return http.Response(
-            jsonEncode({'access_token': jwt(role: role), 'rol': role}), 200);
+            jsonEncode({'access_token': jwt(role: role, organizationId: organizationId), 'rol': role}), 200);
       }
       if (request.url.path.endsWith('/profile')) {
         return http.Response('{}', profileStatus);
@@ -46,6 +48,13 @@ void main() {
     expect(saved['server'], 'http://localhost:8000');
     expect(session.signedIn, isTrue);
   });
+  for (final tenant in {'FashionStore': 1, 'UrbanVogue': 2}.entries) {
+    test('recognizes ${tenant.key} from the authenticated JWT', () async {
+      organizationId = tenant.value;
+      await session.login('http://localhost:8000', 'cliente@test.com', 'secret');
+      expect(session.organizationId, tenant.value);
+    });
+  }
   test('restores session and verifies it with the current backend', () async {
     store.value =
         jsonEncode({'token': jwt(), 'server': 'http://localhost:8000'});
@@ -68,6 +77,16 @@ void main() {
     expect(session.ready, isTrue);
     expect(session.signedIn, isFalse);
     expect(store.value, isNull);
+  });
+  test('rejects a client token without its organization claim', () async {
+    store.value = jsonEncode({
+      'token': jwt(organizationId: null),
+      'server': 'http://localhost:8000'
+    });
+    await session.restore();
+    expect(session.signedIn, isFalse);
+    expect(store.value, isNull);
+    expect(calls, isEmpty);
   });
   test('401 revokes in-memory and persisted session', () async {
     await session.login('http://localhost:8000', 'c@test.com', 'secret');

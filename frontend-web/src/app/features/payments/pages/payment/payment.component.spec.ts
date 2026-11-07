@@ -7,6 +7,7 @@ import { of, throwError } from 'rxjs';
 import { OrderService } from '../../../orders/services/order.service';
 import { PaymentService } from '../../services/payment.service';
 import { PaymentComponent } from './payment.component';
+import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 
 describe('PaymentComponent', () => {
   let component: PaymentComponent;
@@ -24,6 +25,7 @@ describe('PaymentComponent', () => {
     TestBed.configureTestingModule({
       imports: [PaymentComponent, NoopAnimationsModule],
       providers: [
+        { provide: OutboxSyncService, useValue: { queuePaymentRequest: jasmine.createSpy('queuePaymentRequest').and.resolveTo({ operation_uuid: 'offline-op' }) } },
         { provide: OrderService, useValue: orderService },
         { provide: PaymentService, useValue: paymentService },
         { provide: MatSnackBar, useValue: snackBar },

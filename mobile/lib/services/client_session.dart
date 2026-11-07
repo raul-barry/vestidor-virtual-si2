@@ -15,6 +15,14 @@ class ClientSession extends ChangeNotifier {
   bool ready = false;
   String? notice;
   bool get signedIn => repository.api.token != null;
+  int? get organizationId {
+    final value = claims(repository.api.token ?? '')?['id_organizacion'];
+    return value is num && value > 0 ? value.toInt() : null;
+  }
+  int? get userId {
+    final value = claims(repository.api.token ?? '')?['id_usuario'];
+    return value is num && value > 0 ? value.toInt() : null;
+  }
 
   static Map<String, dynamic>? claims(String token) {
     try {
@@ -30,7 +38,10 @@ class ClientSession extends ChangeNotifier {
   static bool validClientToken(String token) {
     final data = claims(token);
     final expiry = data?['exp'];
+    final organizationId = data?['id_organizacion'];
     return data?['rol'] == 'CLIENTE' &&
+        organizationId is num &&
+        organizationId > 0 &&
         expiry is num &&
         expiry * 1000 > DateTime.now().millisecondsSinceEpoch;
   }

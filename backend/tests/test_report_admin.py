@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -6,13 +6,17 @@ from sqlalchemy import select
 
 from conftest import session_token
 from app.main import app
+from app.core.tenancy import set_organization_context
+from app.models.audit_log import AuditLog
 from app.models.bitacora import Bitacora
 from app.models.categoria import Categoria
 from app.models.cliente import Cliente
 from app.models.color import Color
 from app.models.inventario import Inventario
 from app.models.movimiento_inventario import MovimientoInventario
+from app.models.organizacion import Organizacion
 from app.models.pago import Pago
+from app.models.plan import Plan, PlanCaracteristica
 from app.models.pedido import Pedido
 from app.models.pedido_detalle import PedidoDetalle
 from app.models.producto import Producto
@@ -20,7 +24,9 @@ from app.models.producto_variante import ProductoVariante
 from app.models.rol import Rol
 from app.models.sucursal import Sucursal
 from app.models.talla import Talla
+from app.models.suscripcion import Suscripcion
 from app.models.usuario import Usuario
+from app.services.ai_provider_service import AIProviderService
 
 
 def create_headers(db, role_name: str, correo: str) -> tuple[dict[str, str], Usuario]:
@@ -141,3 +147,98 @@ def test_customer_cannot_access_reports(db) -> None:
     response = TestClient(app).get("/api/admin/reports/dashboard", headers=headers)
 
     assert response.status_code == 403
+
+
+def test_ai_report_returns_real_metrics_and_audits_without_personal_data(db, monkeypatch) -> None:
+    headers, admin = create_headers(db, "ADMINISTRADOR", "admin@example.com")
+    create_report_data(db, admin)
+    captured = {}
+
+    def fake_generate(self, body, *, timeout=90.0, capability="complex_reasoning"):
+        captured["body"] = body
+        captured["capability"] = capability
+        return {"candidates": [{"content": {"parts": [{"text": (
+            '{"observaciones":["Se registraron 500 Bs en ventas pagadas."],'
+            '"recomendaciones":["Revisa la continuidad de la tendencia."]}'
+        )}]}}]}
+
+    monkeypatch.setattr(AIProviderService, "generate_content", fake_generate)
+    response = TestClient(app).post(
+        "/api/admin/reports/ai",
+        headers=headers,
+        json={
+            "tipo": "ventas",
+            "fecha_inicio": date.today().isoformat(),
+            "fecha_fin": date.today().isoformat(),
+            "consulta": "Resume ventas. Contacto admin@example.com",
+            "canal": "texto",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["metricas_calculadas"]["ventas_pagadas"] == "500.00"
+    assert result["metricas_calculadas"]["pedidos_pagados"] == 1
+    assert result["periodo"] == {
+        "desde": date.today().isoformat(), "hasta": date.today().isoformat()
+    }
+    assert result["observaciones_ia"] == ["Se registraron 500 Bs en ventas pagadas."]
+    assert result["recomendaciones_ia"] == ["Revisa la continuidad de la tendencia."]
+    assert captured["capability"] == "business_reports"
+    prompt = captured["body"]["contents"][0]["parts"][0]["text"]
+    assert "admin@example.com" not in prompt
+    audit = db.scalar(select(AuditLog).where(
+        AuditLog.organizacion_id == admin.id_organizacion,
+        AuditLog.accion == "REPORTE_IA_CONSULTADO",
+    ))
+    assert audit is not None
+    assert audit.detalles["canal"] == "texto"
+
+
+def test_report_metrics_are_isolated_from_other_organizations(db) -> None:
+    headers, _ = create_headers(db, "ADMINISTRADOR", "admin@example.com")
+    db.info.pop("organization_id", None)
+    db.add(Organizacion(id_organizacion=2, nombre="Urban Vogue", slug="urban-vogue", estado="ACTIVA"))
+    db.commit()
+    set_organization_context(db, 2)
+    category = Categoria(nombre="Urban Category", descripcion=None)
+    product = Producto(
+        categoria=category, nombre="Urban product", descripcion=None,
+        precio_base=Decimal("99.00"), id_organizacion=2,
+    )
+    db.add(product)
+    db.commit()
+    set_organization_context(db, 1)
+
+    response = TestClient(app).get("/api/admin/reports/dashboard", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["productos_totales"] == 0
+
+
+def test_report_plan_gates_voice_and_exposes_plan_features(db, monkeypatch) -> None:
+    headers, admin = create_headers(db, "ADMINISTRADOR", "admin@example.com")
+    plan = Plan(codigo="ESTILO_REPORT_TEST", nombre="Estilo Report Test", max_sucursales=2)
+    db.add(plan)
+    db.flush()
+    db.add(PlanCaracteristica(
+        plan_id=plan.id_plan, codigo="reportes_gemini", nombre="Reportes Gemini", habilitada=True
+    ))
+    db.add(Suscripcion(
+        organizacion_id=admin.id_organizacion, plan_id=plan.id_plan, estado="ACTIVA",
+        fecha_inicio=datetime.now(timezone.utc) - timedelta(minutes=1),
+    ))
+    db.commit()
+    monkeypatch.setattr(AIProviderService, "generate_content", lambda self, body, *, timeout=90.0, capability="primary": {})
+
+    client = TestClient(app)
+    features = client.get("/api/admin/reports/features", headers=headers)
+    voice = client.post("/api/admin/reports/ai", headers=headers, json={
+        "tipo": "ventas", "canal": "voz", "consulta": "ventas",
+    })
+
+    assert features.status_code == 200
+    assert features.json()["reportes_gemini"] is True
+    assert features.json()["reportes_voz"] is False
+    assert voice.status_code == 403
+    assert voice.json()["detail"]["feature"] == "reportes_voz"

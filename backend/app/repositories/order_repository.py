@@ -22,13 +22,15 @@ class OrderRepository:
         return order
 
     def create_order_detail(
-        self, id_pedido: int, id_variante: int, cantidad: int, precio_unitario: Decimal
+        self, id_pedido: int, id_variante: int, cantidad: int, precio_unitario: Decimal,
+        id_reserva: int | None = None
     ) -> PedidoDetalle:
         detail = PedidoDetalle(
             id_pedido=id_pedido,
             id_variante=id_variante,
             cantidad=cantidad,
             precio_unitario=precio_unitario,
+            id_reserva=id_reserva,
         )
         self.db.add(detail)
         self.db.flush()

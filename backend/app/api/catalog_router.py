@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
+from app.core.security import get_optional_current_user
+from app.core.tenancy import set_catalog_context
+from app.models.usuario import Usuario
 from app.schemas.catalog import AvailabilityResponse, ProductCatalogResponse, ProductVariantsResponse
 from app.services.catalog_service import CatalogService
 
@@ -42,7 +45,8 @@ catalog_router = APIRouter(prefix="/catalog", tags=["Catalogo"])
         }
     },
 )
-def get_products(db: Session = Depends(get_db)) -> list[ProductCatalogResponse]:
+def get_products(organization_slug: str | None = Query(default=None), db: Session = Depends(get_db), current_user: Usuario | None = Depends(get_optional_current_user)) -> list[ProductCatalogResponse]:
+    set_catalog_context(db, organization_slug, current_user)
     return CatalogService(db).get_catalog()
 
 
@@ -58,7 +62,10 @@ def search_products(
     color: str | None = Query(default=None),
     precio_max: Decimal | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
+    organization_slug: str | None = Query(default=None),
+    current_user: Usuario | None = Depends(get_optional_current_user),
 ) -> list[ProductCatalogResponse]:
+    set_catalog_context(db, organization_slug, current_user)
     return CatalogService(db).search_catalog(nombre, categoria, talla, color, precio_max)
 
 
@@ -68,8 +75,9 @@ def search_products(
     responses={404: {"description": "Producto no encontrado"}},
 )
 def get_product_variants(
-    id_producto: int, db: Session = Depends(get_db)
+    id_producto: int, organization_slug: str | None = Query(default=None), db: Session = Depends(get_db), current_user: Usuario | None = Depends(get_optional_current_user)
 ) -> ProductVariantsResponse:
+    set_catalog_context(db, organization_slug, current_user)
     return CatalogService(db).get_variants(id_producto)
 
 
@@ -79,6 +87,7 @@ def get_product_variants(
     responses={404: {"description": "Producto no encontrado"}},
 )
 def get_product_availability(
-    id_producto: int, db: Session = Depends(get_db)
+    id_producto: int, organization_slug: str | None = Query(default=None), db: Session = Depends(get_db), current_user: Usuario | None = Depends(get_optional_current_user)
 ) -> AvailabilityResponse:
+    set_catalog_context(db, organization_slug, current_user)
     return CatalogService(db).get_availability(id_producto)

@@ -1,7 +1,7 @@
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, CheckConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, CheckConstraint, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 
@@ -15,8 +15,10 @@ class Ciudad(Base):
 
 class Proveedor(Base):
     __tablename__ = "proveedor"
+    __table_args__ = (UniqueConstraint("id_organizacion", "nombre", name="uq_proveedor_organizacion_nombre"),)
     id_proveedor: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(150), unique=True)
+    id_organizacion: Mapped[int] = mapped_column(ForeignKey("organizacion.id_organizacion"), nullable=False, index=True)
+    nombre: Mapped[str] = mapped_column(String(150))
     contacto: Mapped[str] = mapped_column(String(255), default="")
     descripcion: Mapped[str] = mapped_column(String(500), default="")
     persona_contacto: Mapped[str] = mapped_column(String(150), default="")
@@ -24,18 +26,22 @@ class Proveedor(Base):
     correo: Mapped[str] = mapped_column(String(255), default="")
     direccion: Mapped[str] = mapped_column(String(255), default="")
     estado: Mapped[str] = mapped_column(String(30), default="ACTIVO")
+    organizacion: Mapped["Organizacion"] = relationship(back_populates="proveedores")
 
 
 class Coleccion(Base):
     __tablename__ = "coleccion"
+    __table_args__ = (UniqueConstraint("id_organizacion", "nombre", name="uq_coleccion_organizacion_nombre"),)
     id_coleccion: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(150), unique=True)
+    id_organizacion: Mapped[int] = mapped_column(ForeignKey("organizacion.id_organizacion"), nullable=False, index=True)
+    nombre: Mapped[str] = mapped_column(String(150))
     descripcion: Mapped[str] = mapped_column(String(255), default="")
     temporada: Mapped[str] = mapped_column(String(80), default="")
     anio: Mapped[int | None]
     fecha_inicio: Mapped[date | None] = mapped_column(Date)
     fecha_fin: Mapped[date | None] = mapped_column(Date)
     estado: Mapped[str] = mapped_column(String(30), default="ACTIVO")
+    organizacion: Mapped["Organizacion"] = relationship(back_populates="colecciones")
 
 
 class Promocion(Base):

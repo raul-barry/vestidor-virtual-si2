@@ -5,6 +5,7 @@ from app.models.bitacora import Bitacora
 from app.models.rol import Rol
 from app.models.usuario import Usuario
 from app.models.cliente import Cliente
+from app.models.sucursal import Sucursal
 
 
 class UserAdminRepository:
@@ -24,6 +25,9 @@ class UserAdminRepository:
 
     def get_role_by_name(self, name: str) -> Rol | None:
         return self.db.scalar(select(Rol).where(Rol.nombre == name))
+
+    def get_branch_by_id(self, branch_id: int) -> Sucursal | None:
+        return self.db.scalar(select(Sucursal).where(Sucursal.id_sucursal == branch_id))
 
     def create_user(self, user: Usuario) -> Usuario:
         self.db.add(user)

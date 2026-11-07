@@ -12,6 +12,7 @@
   } @else if (cart?.items?.length === 0) {
     <mat-card class="empty-state">Tu carrito está vacío.</mat-card>
   } @else if (cart) {
+    @if (offline) { <mat-card class="empty-state">Modo offline. Disponibilidad y precios provisionales hasta la confirmación del servidor.</mat-card> }
     <section class="cart-layout">
       <div class="items-list">
         @for (item of cart.items; track item.id_detalle) {

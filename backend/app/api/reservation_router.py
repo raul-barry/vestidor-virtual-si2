@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +10,7 @@ from app.core.security import require_roles, require_branch
 from app.database.database import get_db
 from app.models.bitacora import Bitacora
 from app.models.inventario import Inventario
+from app.models.movimiento_inventario import MovimientoInventario
 from app.models.reserva import Reserva
 from app.models.usuario import Usuario
 
@@ -22,14 +24,16 @@ class ReservationCreate(BaseModel):
 
 
 class ReservationUpdate(BaseModel):
-    estado: Literal["CONFIRMADA", "CANCELADA", "ATENDIDA"]
+    # CONFIRMADA and ATENDIDA remain accepted for existing clients.
+    estado: Literal["PENDIENTE", "RESERVADA", "CONFIRMADA", "CANCELADA", "COMPLETADA", "ATENDIDA"]
 
 
 def present(db, item):
     inv = db.get(Inventario, item.id_inventario)
     return dict(id_reserva=item.id_reserva, id_usuario=item.id_usuario,
-                id_inventario=item.id_inventario, cantidad=item.cantidad, estado=item.estado,
-                fecha=item.fecha, producto=inv.variante.producto.nombre,
+                id_inventario=item.id_inventario, id_variante=inv.id_variante, cantidad=item.cantidad, estado=item.estado,
+                fecha=item.fecha, id_pedido=item.id_pedido, producto=inv.variante.producto.nombre,
+                fecha_expiracion=item.fecha_expiracion,
                 talla=inv.variante.talla.nombre, color=inv.variante.color.nombre,
                 sucursal=inv.sucursal.nombre)
 
@@ -69,7 +73,9 @@ def reserve(data: ReservationCreate, db: Session = Depends(get_db),
         raise HTTPException(409, "Disponibilidad insuficiente")
     inv.stock_disponible -= data.cantidad
     inv.stock_reservado += data.cantidad
-    item = Reserva(id_usuario=user.id_usuario, **data.model_dump())
+    confirmed_at = datetime.now(timezone.utc)
+    item = Reserva(id_usuario=user.id_usuario, fecha=confirmed_at,
+                   fecha_expiracion=confirmed_at + timedelta(days=7), **data.model_dump())
     db.add(item)
     db.add(Bitacora(id_usuario=user.id_usuario, accion="Creación de reserva"))
     db.commit()
@@ -85,21 +91,32 @@ def update(reservation_id: int, data: ReservationUpdate, db: Session = Depends(g
         raise HTTPException(403, "Solo puede cancelar su reserva")
     if user.rol.nombre != "CLIENTE":
         require_branch(user, db.get(Inventario, item.id_inventario).id_sucursal)
-    if item.estado in ("CANCELADA", "ATENDIDA") or data.estado == item.estado:
+    # Repeated cancellation is an idempotent read of the already-applied result.
+    # The inventory release below is reached only for an active reservation.
+    if item.estado == "CANCELADA" and data.estado == "CANCELADA":
+        return present(db, item)
+    if item.estado in ("CANCELADA", "COMPLETADA", "ATENDIDA") or data.estado == item.estado:
         raise HTTPException(409, "La reserva ya fue procesada")
     if data.estado == "CANCELADA":
         inv = db.scalar(select(Inventario).where(Inventario.id_inventario == item.id_inventario).with_for_update())
         if inv.stock_reservado < item.cantidad:
             raise HTTPException(409, "La reserva no tiene stock reservado")
+        previous_stock = inv.stock_disponible
         inv.stock_reservado -= item.cantidad
         inv.stock_disponible += item.cantidad
-    elif data.estado == "ATENDIDA":
-        if item.estado != "CONFIRMADA":
-            raise HTTPException(409, "Solo se puede atender una reserva confirmada")
+        db.add(MovimientoInventario(
+            id_inventario=inv.id_inventario, tipo_movimiento="LIBERACION_RESERVA",
+            cantidad=item.cantidad, stock_anterior=previous_stock, stock_nuevo=inv.stock_disponible,
+            motivo=f"Cancelación de reserva {item.id_reserva}", id_usuario=user.id_usuario,
+        ))
+    elif data.estado in ("COMPLETADA", "ATENDIDA"):
+        if item.estado not in ("RESERVADA", "CONFIRMADA"):
+            raise HTTPException(409, "Solo se puede completar una reserva confirmada")
         inv = db.scalar(select(Inventario).where(Inventario.id_inventario == item.id_inventario).with_for_update())
         if inv.stock_reservado < item.cantidad:
             raise HTTPException(409, "La reserva no tiene stock reservado")
         inv.stock_reservado -= item.cantidad
+        inv.stock_vendido += item.cantidad
     item.estado = data.estado
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Reserva {reservation_id}: {data.estado}"))
     db.commit()
