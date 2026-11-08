@@ -1,0 +1,103 @@
+<section class="comparison" aria-labelledby="comparison-title">
+  <header class="heading">
+    <div>
+      <p class="eyebrow">ANALÍTICA COMERCIAL</p>
+      <h2 id="comparison-title">Comparación por sucursal</h2>
+      <p>Compara ventas netas confirmadas dentro de tu organización.</p>
+    </div>
+    @if (result && exportAllowed) {
+      <div class="exports">
+        <button type="button" class="secondary" (click)="export('pdf')" [disabled]="!!exporting || refreshing">
+          {{ exporting === 'pdf' ? 'Generando…' : 'Exportar PDF' }}
+        </button>
+        <button type="button" class="secondary" (click)="export('xlsx')" [disabled]="!!exporting || refreshing">
+          {{ exporting === 'xlsx' ? 'Generando…' : 'Exportar Excel' }}
+        </button>
+      </div>
+    }
+  </header>
+
+  @if (loading) {
+    <p role="status">Cargando sucursales y reportes…</p>
+  } @else if (!allowed) {
+    <p class="notice" role="status">Tu usuario o plan no tiene habilitada la comparación de sucursales.</p>
+  } @else {
+    <form class="filters" (ngSubmit)="refresh()">
+      <label>Desde<input type="date" name="from" [(ngModel)]="dateFrom" [max]="dateTo"></label>
+      <label>Hasta<input type="date" name="to" [(ngModel)]="dateTo" [min]="dateFrom" [max]="today"></label>
+      <label class="branch-filter">Sucursales
+        <select name="branches" multiple [(ngModel)]="selectedBranches" [disabled]="refreshing">
+          @for (branch of branches; track branch.id_sucursal) {
+            <option [ngValue]="branch.id_sucursal">{{ branch.nombre }}</option>
+          }
+        </select>
+        <small>Sin selección se comparan todas las sucursales autorizadas.</small>
+      </label>
+      <button type="submit" [disabled]="refreshing">{{ refreshing ? 'Actualizando…' : 'Actualizar comparación' }}</button>
+    </form>
+
+    @if (error) { <p class="error" role="alert">{{ error }}</p> }
+
+    @if (result) {
+      <div class="period">
+        <span><strong>{{ result.organizacion }}</strong></span>
+        <span>Período {{ result.periodo.desde }} — {{ result.periodo.hasta }}</span>
+        <span>Comparado con {{ result.periodo_anterior.desde }} — {{ result.periodo_anterior.hasta }}</span>
+        <span>Zona {{ result.zona_horaria }}</span>
+      </div>
+      @if (!exportAllowed) { <p class="notice">La exportación PDF y Excel no está incluida en el plan actual.</p> }
+
+      <div class="kpis">
+        <article><span>Ingresos netos</span><strong>{{ money(result.totales.ingresos_netos) }}</strong>
+          <small>Variación: {{ result.totales.variacion_porcentual === null ? 'Sin base anterior' : (result.totales.variacion_porcentual | number:'1.1-2') + '%' }}</small></article>
+        <article><span>Ventas confirmadas</span><strong>{{ result.totales.cantidad_ventas }}</strong>
+          <small>Ticket promedio {{ money(result.totales.ticket_promedio) }}</small></article>
+        <article><span>Mayores ingresos</span><strong>{{ branchName(result.destacados.mayores_ingresos) }}</strong></article>
+        <article><span>Más transacciones</span><strong>{{ branchName(result.destacados.mas_transacciones) }}</strong></article>
+        <article><span>Mayor ticket promedio</span><strong>{{ branchName(result.destacados.mayor_ticket_promedio) }}</strong></article>
+        <article><span>Menores ingresos</span><strong>{{ branchName(result.destacados.menores_ingresos) }}</strong></article>
+      </div>
+
+      @if (result.sucursales.length) {
+        <section class="chart" aria-label="Comparación de ingresos actuales y anteriores">
+          <h3>Ingresos por sucursal</h3>
+          <div class="legend"><span><i></i>Período actual</span><span><i class="previous-key"></i>Período anterior</span></div>
+          @for (row of result.sucursales; track row.id_sucursal) {
+            <div class="bar-row">
+              <span class="bar-label">{{ row.sucursal }}</span>
+              <div class="bar-track"><span class="bar current" [style.width.%]="barWidth(row.ingresos_netos)"></span></div>
+              <strong>{{ money(row.ingresos_netos) }}</strong>
+              <div class="bar-track"><span class="bar previous" [style.width.%]="barWidth(row.ingresos_periodo_anterior)"></span></div>
+              <small>{{ money(row.ingresos_periodo_anterior) }}</small>
+            </div>
+          }
+        </section>
+      } @else {
+        <p class="notice">No hay sucursales para los filtros seleccionados.</p>
+      }
+
+      <section class="table-wrap">
+        <h3>Detalle y ranking</h3>
+        <table>
+          <thead><tr>
+            <th>Ranking</th>
+            <th><button class="sort" (click)="sortBy('sucursal')">Sucursal</button></th>
+            <th><button class="sort" (click)="sortBy('ingresos_netos')">Ingresos netos</button></th>
+            <th><button class="sort" (click)="sortBy('cantidad_ventas')">Ventas</button></th>
+            <th><button class="sort" (click)="sortBy('ticket_promedio')">Ticket promedio</button></th>
+            <th><button class="sort" (click)="sortBy('variacion_porcentual')">Variación</button></th>
+          </tr></thead>
+          <tbody>@for (row of sortedRows; track row.id_sucursal) {
+            <tr>
+              <td>#{{ row.ranking }}</td><td>{{ row.sucursal }}</td>
+              <td>{{ money(row.ingresos_netos) }}</td><td>{{ row.cantidad_ventas }}</td>
+              <td>{{ money(row.ticket_promedio) }}</td>
+              <td>{{ row.variacion_porcentual === null ? 'No disponible' : (row.variacion_porcentual | number:'1.1-2') + '%' }}</td>
+            </tr>
+          }</tbody>
+        </table>
+      </section>
+      <p class="footnote">Los ingresos descuentan reembolsos monetarios completados. Pedidos cancelados y pagos no confirmados no se cuentan.</p>
+    }
+  }
+</section>

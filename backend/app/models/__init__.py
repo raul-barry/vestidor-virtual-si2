@@ -32,6 +32,7 @@ from app.models.exchange import GarmentExchange, ExchangeInventoryIncident, Orga
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_adjustment import PaymentAdjustment
 from app.models.platform_ai_config import PlatformAIConfig, PlatformAIConfigAudit
+from app.models.loyalty import LoyaltyProgram, LoyaltyAccount, LoyaltyTier, LoyaltyLedger
 
 __all__ = [
     "Base",
@@ -68,6 +69,10 @@ __all__ = [
     "OrganizationHoliday",
     "PaymentRefund",
     "PaymentAdjustment",
+    "LoyaltyProgram",
+    "LoyaltyAccount",
+    "LoyaltyTier",
+    "LoyaltyLedger",
     "PlatformAIConfig",
     "PlatformAIConfigAudit",
     "PerfilCorporal",

@@ -139,6 +139,26 @@ def get_current_staff(current_user: Usuario = Depends(get_current_user)) -> Usua
     return current_user
 
 
+def get_current_report_comparison_user(
+    current_user: Usuario = Depends(get_current_user),
+) -> Usuario:
+    """Allow tenant admins, or branch managers explicitly granted the report permission."""
+    if current_user.rol.nombre == "ADMINISTRADOR":
+        if current_user.id_organizacion is None:
+            raise HTTPException(status_code=403, detail="Contexto empresarial requerido")
+        return current_user
+    permitted_role = current_user.rol.nombre in {"ENCARGADO_SUCURSAL", "ENCARGADO", "GERENTE"}
+    permission_codes = {permission.codigo for permission in current_user.rol.permisos}
+    if (
+        permitted_role
+        and current_user.id_organizacion is not None
+        and current_user.id_sucursal is not None
+        and "REPORTES_COMPARATIVOS" in permission_codes
+    ):
+        return current_user
+    raise HTTPException(status_code=403, detail="No tienes permiso para consultar comparaciones de ventas")
+
+
 def require_branch(user: Usuario, branch_id: int) -> None:
     if user.rol.nombre != "ADMINISTRADOR" and (user.id_sucursal is None or user.id_sucursal != branch_id):
         raise HTTPException(status_code=403, detail="Sucursal no asignada al usuario")

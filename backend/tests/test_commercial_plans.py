@@ -15,6 +15,9 @@ def test_seed_creates_three_plans_and_feature_matrix_idempotently(db):
     assert plans["MODA"].max_sucursales == 10
     assert plans["GLAMOUR"].max_sucursales is None
     assert [len(plans[code].caracteristicas) for code in ("ESTILO", "MODA", "GLAMOUR")] == [8, 13, 18]
+    assert "reportes_ia" not in {feature.codigo for feature in plans["ESTILO"].caracteristicas}
+    assert "reportes_ia" in {feature.codigo for feature in plans["MODA"].caracteristicas}
+    assert "reportes_ia" in {feature.codigo for feature in plans["GLAMOUR"].caracteristicas}
 
     plans["MODA"].max_sucursales = 12
     moda_catalog = next(feature for feature in plans["MODA"].caracteristicas if feature.codigo == "catalogo")
@@ -33,6 +36,27 @@ def test_seed_creates_three_plans_and_feature_matrix_idempotently(db):
     assert moda_catalog.habilitada is False
     assert moda_catalog.limite == 100
     assert moda_catalog.configuracion == {"modo": "compacto"}
+
+
+def test_seed_migrates_legacy_ai_entitlement_without_changing_its_setting(db):
+    plan = Plan(codigo="MODA", nombre="Plan Moda", max_sucursales=10)
+    db.add(plan)
+    db.flush()
+    db.add(PlanCaracteristica(
+        plan_id=plan.id_plan, codigo="reportes_gemini", nombre="Legacy",
+        habilitada=False, limite=3, configuracion={"scope": "tenant"},
+    ))
+    db.commit()
+
+    seed_commercial_plans(db)
+    db.flush()
+    feature = db.scalar(select(PlanCaracteristica).where(
+        PlanCaracteristica.plan_id == plan.id_plan, PlanCaracteristica.codigo == "reportes_ia"
+    ))
+    assert feature is not None
+    assert feature.habilitada is False
+    assert feature.limite == 3
+    assert feature.configuracion == {"scope": "tenant"}
 
 
 def test_plan_codes_are_unique(db):

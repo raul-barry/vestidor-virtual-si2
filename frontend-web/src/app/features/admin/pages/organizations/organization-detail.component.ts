@@ -52,7 +52,7 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
                 <mat-form-field appearance="outline"><mat-label>URL del logo</mat-label><input matInput type="url" formControlName="logo_url"><mat-error>Usa una URL http o https.</mat-error></mat-form-field>
                 <mat-form-field appearance="outline"><mat-label>Slug público</mat-label><input matInput formControlName="slug"><mat-error>Usa minúsculas, números y guiones.</mat-error></mat-form-field>
                 @if (profileError) { <p class="form-error" role="alert">{{profileError}}</p> }
-                <div class="form-actions"><button mat-flat-button color="primary" [disabled]="profileForm.invalid || profileSaving">{{profileSaving ? 'Guardando…' : 'Guardar cambios'}}</button></div>
+                <div class="form-actions"><button mat-flat-button color="primary" [disabled]="profileForm.invalid || !profileForm.dirty || profileSaving">{{profileSaving ? 'Guardando…' : 'Guardar cambios'}}</button></div>
               </form>
             </mat-card-content></mat-card>
           }
@@ -84,7 +84,7 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
             @if (activityError) { <p class="form-error" role="alert">{{activityError}}</p> }
             @if (activityLoading) { <app-loading-spinner /> }
             @else if (!activity.length) { <p class="muted">No hay actividad para los filtros seleccionados.</p> }
-            @else { <div class="table-scroll"><table><thead><tr><th>Fecha y hora</th><th>Usuario responsable</th><th>Rol</th><th>AcciÃ³n</th><th>Entidad</th><th>Resultado</th></tr></thead><tbody>@for (item of activity; track item.id) { <tr><td>{{item.fecha_hora | date:'medium'}}</td><td>{{actorLabel(item.usuario_id)}}</td><td>{{item.rol}}</td><td>{{item.accion}}</td><td>{{item.entidad}} {{item.entidad_id || ''}}</td><td>{{item.resultado}}</td></tr> }</tbody></table></div>
+            @else { <div class="table-scroll"><table><thead><tr><th>Fecha y hora</th><th>Usuario responsable</th><th>Rol</th><th>Acción</th><th>Entidad</th><th>Resultado</th></tr></thead><tbody>@for (item of activity; track item.id) { <tr><td>{{item.fecha_hora | date:'medium'}}</td><td>{{actorLabel(item.usuario_id)}}</td><td>{{item.rol}}</td><td>{{item.accion}}</td><td>{{item.entidad}} {{item.entidad_id || ''}}</td><td>{{item.resultado}}</td></tr> }</tbody></table></div>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem"><span>{{activityPage?.total ?? 0}} registros</span><div><button mat-stroked-button type="button" [disabled]="activityOffset === 0" (click)="activityOffset = activityOffset - activityLimit; loadActivity()">Anterior</button> <button mat-stroked-button type="button" [disabled]="activityOffset + activityLimit >= (activityPage?.total ?? 0)" (click)="activityOffset = activityOffset + activityLimit; loadActivity()">Siguiente</button></div></div> }
           </mat-card-content></mat-card>
           <mat-card><mat-card-header><mat-card-title>Sucursales</mat-card-title></mat-card-header><mat-card-content>
@@ -203,7 +203,7 @@ export class OrganizationDetailComponent implements OnInit {
     this.activityLoading = true; this.activityError = '';
     this.activityService.list(this.organization.id_organizacion, { desde: this.activityFrom, hasta: this.activityUntil, tipo: this.activityType, usuarioId: this.activityUser ?? undefined, limit: this.activityLimit, offset: this.activityOffset }).subscribe({
       next: page => { this.activityPage = page; this.activity = page.items; this.activityLoading = false; },
-      error: (e: HttpErrorResponse) => { this.activityLoading = false; this.activityError = e.status === 401 ? 'La sesiÃ³n expirÃ³.' : e.status === 403 ? 'No tienes permisos para consultar esta actividad.' : 'No se pudo cargar el historial de actividad.'; }
+      error: (e: HttpErrorResponse) => { this.activityLoading = false; this.activityError = e.status === 401 ? 'La sesión expiró.' : e.status === 403 ? 'No tienes permisos para consultar esta actividad.' : 'No se pudo cargar el historial de actividad.'; }
     });
   }
 
@@ -270,8 +270,13 @@ export class OrganizationDetailComponent implements OnInit {
   saveProfile(): void {
     if (!this.organization) return;
     this.profileError = '';
+    if (!this.profileForm.dirty) return;
     if (this.profileForm.invalid) { this.profileForm.markAllAsTouched(); return; }
-    const payload: UpdateOrganizationRequest = this.profileForm.getRawValue();
+    const values = this.profileForm.getRawValue();
+    const changedFields = Object.keys(this.profileForm.controls) as Array<keyof typeof this.profileForm.controls>;
+    const payload = Object.fromEntries(changedFields
+      .filter((field) => this.profileForm.controls[field].dirty)
+      .map((field) => [field, values[field].trim() === '' && field !== 'nombre' && field !== 'slug' ? null : values[field]])) as UpdateOrganizationRequest;
     this.profileSaving = true;
     this.service.update(this.organization.id_organizacion, payload).subscribe({
       next: (updated) => { this.organization = updated; this.profileSaving = false; this.editingProfile = false; this.snack.open('Información empresarial actualizada.', 'Cerrar', { duration: 3500 }); },
@@ -308,6 +313,11 @@ export class OrganizationDetailComponent implements OnInit {
   private message(error: HttpErrorResponse, fallback: string): string {
     if (error.status === 403) return 'Tu cuenta no tiene permiso para administrar empresas.';
     const detail = error.error?.detail ?? error.error?.message;
-    return typeof detail === 'string' ? detail : fallback;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      const validationMessage = detail.find((item) => typeof item?.msg === 'string')?.msg;
+      if (typeof validationMessage === 'string') return validationMessage;
+    }
+    return fallback;
   }
 }

@@ -32,7 +32,8 @@ class PlanFeaturesAdminUpdate(BaseModel):
 
     @model_validator(mode="after")
     def unique_codes(self):
-        codes = [item.codigo for item in self.caracteristicas]
+        codes = ["reportes_ia" if item.codigo == "reportes_gemini" else item.codigo
+                 for item in self.caracteristicas]
         if len(codes) != len(set(codes)):
             raise ValueError("No se permiten códigos de característica duplicados")
         return self

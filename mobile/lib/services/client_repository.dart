@@ -160,6 +160,7 @@ class ClientRepository {
   }
 
   Future<Json> profile() => object('GET', '/api/users/profile');
+  Future<Json> loyalty() => object('GET', '/api/loyalty/me');
   Future<Json> updateProfile(Json data) =>
       object('PUT', '/api/users/profile', data);
   Future<List<Json>> recommendations(Map<String, String> filters) =>

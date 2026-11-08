@@ -134,17 +134,34 @@ def test_feature_matrix_and_tenant_isolation(db):
 
     set_organization_context(db, 1)
     with pytest.raises(HTTPException) as missing:
-        PlanAccessService(db).require_feature("reportes_gemini")
+        PlanAccessService(db).require_feature("reportes_ia")
     assert missing.value.detail["code"] == "PLAN_FEATURE_NOT_INCLUDED"
 
     set_organization_context(db, 2)
-    assert PlanAccessService(db).require_feature("reportes_gemini").plan.codigo == "MODA"
+    assert PlanAccessService(db).require_feature("reportes_ia").plan.codigo == "MODA"
     with pytest.raises(HTTPException) as moda_ml:
         PlanAccessService(db).require_feature("machine_learning")
     assert moda_ml.value.detail["code"] == "PLAN_FEATURE_NOT_INCLUDED"
 
     set_organization_context(db, 3)
     assert PlanAccessService(db).require_feature("machine_learning").plan.codigo == "GLAMOUR"
+
+
+def test_canonical_ai_feature_overrides_legacy_setting(db):
+    db.info.pop("organization_id", None)
+    plan = _add_plan(db, "MODA", 10, ("reportes_gemini", "reportes_ia"))
+    db.flush()
+    canonical = db.scalar(select(PlanCaracteristica).where(
+        PlanCaracteristica.plan_id == plan.id_plan, PlanCaracteristica.codigo == "reportes_ia"
+    ))
+    canonical.habilitada = False
+    _subscribe(db, 1, plan)
+    db.commit()
+    set_organization_context(db, 1)
+
+    with pytest.raises(HTTPException) as disabled:
+        PlanAccessService(db).require_feature("reportes_ia")
+    assert disabled.value.detail["code"] == "PLAN_FEATURE_NOT_INCLUDED"
 
 
 def test_expired_and_legacy_tenants_follow_compatibility_policy(db):
@@ -155,7 +172,7 @@ def test_expired_and_legacy_tenants_follow_compatibility_policy(db):
     set_organization_context(db, 1)
 
     with pytest.raises(HTTPException) as error:
-        PlanAccessService(db).require_feature("reportes_gemini")
+        PlanAccessService(db).require_feature("reportes_ia")
     assert error.value.detail["code"] == "SUBSCRIPTION_EXPIRED"
     db.refresh(expired)
     assert expired.estado == "VENCIDA"
@@ -170,7 +187,7 @@ def test_expired_and_legacy_tenants_follow_compatibility_policy(db):
     db.add(Organizacion(id_organizacion=2, nombre="Legacy Shop", slug="legacy-shop", estado="ACTIVA"))
     db.commit()
     set_organization_context(db, 2)
-    access = PlanAccessService(db).require_feature("reportes_gemini")
+    access = PlanAccessService(db).require_feature("reportes_ia")
     assert access.has_subscription_history is False
     legacy_headers = _role_admin(db, organization_id=2)
     legacy_branch = _create_branch(TestClient(app), legacy_headers, "Legacy tenant branch")
@@ -185,7 +202,7 @@ def test_cancelled_tenant_requires_subscription(db):
     set_organization_context(db, 1)
 
     with pytest.raises(HTTPException) as error:
-        PlanAccessService(db).require_feature("reportes_gemini")
+        PlanAccessService(db).require_feature("reportes_ia")
     assert error.value.detail["code"] == "SUBSCRIPTION_REQUIRED"
 
     headers = _role_admin(db)

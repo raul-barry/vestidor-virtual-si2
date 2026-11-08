@@ -3,7 +3,7 @@
   @if (role === 'ADMINISTRADOR') {
     <a class="overview" routerLink="/admin/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page" (click)="navigate.emit()">Dashboard</a>
   }
-  @for (group of navigationGroups(role); track group.label) {
+  @for (group of visibleGroups; track group.label) {
     <details routerLinkActive="current-group" #activeGroup="routerLinkActive" [attr.open]="activeGroup.isActive || role !== 'ADMINISTRADOR' ? '' : null">
       <summary>{{ group.label }}</summary>
       @for (item of group.links; track item.path) {

@@ -1,13 +1,20 @@
 import os
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from dotenv import dotenv_values
 
 import app.models  # noqa: F401  # Imports future models registered by the package.
 from app.models.base import Base
 
 config = context.config
-database_url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+env_file = Path(config.config_file_name or "alembic.ini").resolve().parent / ".env"
+database_url = (
+    os.getenv("DATABASE_URL")
+    or dotenv_values(env_file).get("DATABASE_URL")
+    or config.get_main_option("sqlalchemy.url")
+)
 if database_url and database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 config.set_main_option("sqlalchemy.url", database_url)

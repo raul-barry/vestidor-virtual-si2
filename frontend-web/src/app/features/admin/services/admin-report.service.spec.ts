@@ -50,4 +50,22 @@ describe('AdminReportService', () => {
 
     expect(api.postBlob).toHaveBeenCalledWith('/api/admin/reports/export/xlsx', request);
   });
+
+  it('uses tenant-authenticated branch comparison endpoints and serializes selected branches', () => {
+    const api = jasmine.createSpyObj<ApiService>('ApiService', ['get', 'getBlob']);
+    api.get.and.returnValue(of([]));
+    api.getBlob.and.returnValue(of(new Blob(['file'])));
+    const service = new AdminReportService(api);
+    const filters = { fecha_inicio: '2026-11-01', fecha_fin: '2026-11-08', id_sucursal: [2, 5] };
+
+    service.getBranchComparisonAccess().subscribe();
+    service.getComparisonBranches().subscribe();
+    service.getBranchSalesComparison(filters).subscribe();
+    service.exportBranchSalesComparison(filters, 'pdf').subscribe();
+
+    expect(api.get).toHaveBeenCalledWith('/api/admin/reports/comparison/access');
+    expect(api.get).toHaveBeenCalledWith('/api/admin/reports/comparison/branches');
+    expect(api.get).toHaveBeenCalledWith('/api/admin/reports/comparison?fecha_inicio=2026-11-01&fecha_fin=2026-11-08&id_sucursal=2&id_sucursal=5');
+    expect(api.getBlob).toHaveBeenCalledWith('/api/admin/reports/comparison/export/pdf?fecha_inicio=2026-11-01&fecha_fin=2026-11-08&id_sucursal=2&id_sucursal=5');
+  });
 });

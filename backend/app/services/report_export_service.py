@@ -1,7 +1,7 @@
 """Dependency-free PDF and XLSX rendering for tenant-scoped report metrics."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 import re
@@ -35,9 +35,9 @@ def _totals(report_type: str, metrics: dict) -> list[tuple[str, Any]]:
         branches = metrics.get("rendimiento_por_sucursal", [])
         return [
             ("Total ventas pagadas", sum(
-                (Decimal(str(row.get("ventas_pagadas", 0))) for row in branches), Decimal("0")
+                (Decimal(str(row.get("ventas_pagadas", row.get("ingresos_netos", 0)))) for row in branches), Decimal("0")
             )),
-            ("Total pedidos pagados", sum((row.get("pedidos_pagados", 0) for row in branches), 0)),
+            ("Total pedidos pagados", sum((row.get("pedidos_pagados", row.get("cantidad_ventas", 0)) for row in branches), 0)),
         ]
     if report_type == "inventario":
         return [("Total stock disponible", metrics.get("stock_disponible_total", 0)),
@@ -68,11 +68,14 @@ def _safe_filename(report_type: str, start: date, end: date, extension: str) -> 
     return f"fashionstore-{slug}-{start.isoformat()}-{end.isoformat()}.{extension}"
 
 
-def _xlsx(title: str, start: date, end: date, branch: str, metrics: dict) -> bytes:
+def _xlsx(title: str, start: date, end: date, branch: str, metrics: dict,
+          organization_name: str | None = None, generated_at: datetime | None = None) -> bytes:
     rows: list[list[Any]] = [
         [title],
+        *([["Empresa", organization_name]] if organization_name else []),
         ["Periodo", f"{start.isoformat()} a {end.isoformat()}"],
         ["Sucursal", branch or "Todas las sucursales"],
+        ["Generado", (generated_at or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat()],
         [],
         ["Metrica", "Valor"],
     ]
@@ -121,9 +124,13 @@ def _totals_for_sheet(title: str, metrics: dict) -> list[list[Any]]:
     return [[label, value] for label, value in _totals(report_type, metrics)]
 
 
-def _pdf(title: str, start: date, end: date, branch: str, metrics: dict) -> bytes:
+def _pdf(title: str, start: date, end: date, branch: str, metrics: dict,
+         organization_name: str | None = None, generated_at: datetime | None = None) -> bytes:
     lines = [title, f"Periodo: {start.isoformat()} a {end.isoformat()}",
-             f"Sucursal: {branch or 'Todas las sucursales'}", "", "Metricas calculadas"]
+             *([f"Empresa: {organization_name}"] if organization_name else []),
+             f"Sucursales: {branch or 'Todas las sucursales'}",
+             f"Generado: {(generated_at or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat()}",
+             "", "Metricas calculadas"]
     lines.extend(f"{label}: {value}" for label, value in _flatten(metrics))
     lines.extend(["", "Totales"])
     lines.extend(f"{label}: {value}" for label, value in _totals(
@@ -167,14 +174,15 @@ def _pdf(title: str, start: date, end: date, branch: str, metrics: dict) -> byte
 
 def build_report_export(
     format_name: str, report_type: str, start: date, end: date,
-    branch: str, metrics: dict,
+    branch: str, metrics: dict, organization_name: str | None = None,
+    generated_at: datetime | None = None,
 ) -> tuple[bytes, str, str]:
     """Render already tenant-filtered server metrics to PDF or XLSX."""
     title = REPORT_LABELS[report_type]
     if format_name == "pdf":
-        return _pdf(title, start, end, branch, metrics), "application/pdf", _safe_filename(report_type, start, end, "pdf")
+        return _pdf(title, start, end, branch, metrics, organization_name, generated_at), "application/pdf", _safe_filename(report_type, start, end, "pdf")
     return (
-        _xlsx(title, start, end, branch, metrics),
+        _xlsx(title, start, end, branch, metrics, organization_name, generated_at),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         _safe_filename(report_type, start, end, "xlsx"),
     )

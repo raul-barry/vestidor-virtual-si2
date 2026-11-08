@@ -10,7 +10,7 @@ from app.models import (
     Promocion, Proveedor, RecursoVirtual, Reserva, Sesion, Sucursal,
     Suscripcion, TokenRecuperacion, Usuario, AuditLog, MovimientoInventario, SyncIdempotency,
     DeviceSyncCredential, GarmentExchange, ExchangeInventoryIncident, OrganizationHoliday,
-    PaymentRefund, PaymentAdjustment,
+    PaymentRefund, PaymentAdjustment, LoyaltyProgram, LoyaltyAccount, LoyaltyTier, LoyaltyLedger,
 )
 
 
@@ -117,6 +117,10 @@ def install_tenant_session_hooks() -> None:
             (Pago, lambda cls: _order(cls.id_pedido, org_id)),
             (PaymentRefund, lambda cls: cls.organization_id == org_id),
             (PaymentAdjustment, lambda cls: cls.organization_id == org_id),
+            (LoyaltyProgram, lambda cls: cls.organization_id == org_id),
+            (LoyaltyAccount, lambda cls: cls.organization_id == org_id),
+            (LoyaltyTier, lambda cls: cls.organization_id == org_id),
+            (LoyaltyLedger, lambda cls: cls.organization_id == org_id),
             (Reserva, lambda cls: and_(_user(cls.id_usuario, org_id), _inventory(cls.id_inventario, org_id), or_(cls.id_pedido.is_(None), _order(cls.id_pedido, org_id)))),
             (MovimientoInventario, lambda cls: and_(_inventory(cls.id_inventario, org_id), _user(cls.id_usuario, org_id))),
             (Devolucion, lambda cls: and_(
@@ -175,7 +179,7 @@ def install_tenant_session_hooks() -> None:
                 raise ValueError("El cambio no pertenece a la organización autenticada")
 
         for entity in session.new.union(session.dirty).union(session.deleted):
-            if isinstance(entity, (PaymentRefund, PaymentAdjustment)) and entity.organization_id != org_id:
+            if isinstance(entity, (PaymentRefund, PaymentAdjustment, LoyaltyProgram, LoyaltyAccount, LoyaltyTier, LoyaltyLedger)) and entity.organization_id != org_id:
                 raise ValueError("La operaciÃ³n financiera no pertenece a la organizaciÃ³n autenticada")
 
         def belongs(model, key, value):
@@ -220,6 +224,10 @@ def install_tenant_session_hooks() -> None:
                               (GarmentExchange, "exchange_id"), (Devolucion, "return_id")]
             elif isinstance(entity, PaymentAdjustment):
                 references = [(GarmentExchange, "exchange_id"), (Pago, "original_payment_id")]
+            elif isinstance(entity, LoyaltyAccount):
+                references = [(Cliente, "customer_id")]
+            elif isinstance(entity, LoyaltyLedger):
+                references = [(LoyaltyAccount, "account_id"), (Pedido, "order_id")]
             elif isinstance(entity, MovimientoInventario):
                 references = [(Inventario, "id_inventario"), (Usuario, "id_usuario")]
             elif isinstance(entity, Devolucion):

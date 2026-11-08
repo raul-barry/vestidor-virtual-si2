@@ -1,4 +1,4 @@
-﻿import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NEVER, of } from 'rxjs';
 import { AdminReportService } from '../../services/admin-report.service';
 import { AiReportPanelComponent } from './ai-report-panel.component';
@@ -12,7 +12,7 @@ describe('AiReportPanelComponent', () => {
       'getFeatures', 'getBranches', 'generateAiReport', 'exportAiReport',
     ]);
     reports.getFeatures.and.returnValue(of({
-      reportes_gemini: true,
+      reportes_ia: true,
       reportes_voz: false,
       comparacion_sucursales: false,
       exportacion_pdf_excel: true,
@@ -22,8 +22,8 @@ describe('AiReportPanelComponent', () => {
       tipo: 'ventas',
       periodo: { desde: '2026-11-01', hasta: '2026-11-05' },
       metricas_calculadas: { ventas_pagadas: '450.00', pedidos_pagados: 3 },
-      observaciones_ia: ['Se registraron ventas en el perÃ­odo.'],
-      recomendaciones_ia: ['Revisa el comportamiento en el siguiente perÃ­odo.'],
+      observaciones_ia: ['Se registraron ventas en el per\u00edodo.'],
+      recomendaciones_ia: ['Revisa el comportamiento en el siguiente per\u00edodo.'],
     }));
     reports.exportAiReport.and.returnValue(NEVER);
     await TestBed.configureTestingModule({ imports: [AiReportPanelComponent] })
@@ -39,7 +39,7 @@ describe('AiReportPanelComponent', () => {
     fixture.componentInstance.generate();
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('MÃ©tricas calculadas');
+    expect(text).toContain('M\u00e9tricas calculadas');
     expect(text).toContain('Observaciones de Groq');
     expect(text).toContain('Recomendaciones generadas por IA');
     expect(text).not.toContain('Consultar por voz');
@@ -60,7 +60,7 @@ describe('AiReportPanelComponent', () => {
       consulta: 'Resume ventas',
       canal: 'texto',
     }));
-    expect(fixture.nativeElement.textContent).toContain('2026-11-01 â€” 2026-11-05');
+    expect(fixture.nativeElement.textContent).toContain('2026-11-01 \u2014 2026-11-05');
     expect(fixture.nativeElement.textContent).toContain('450.00');
   });
 

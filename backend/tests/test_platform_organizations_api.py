@@ -9,7 +9,7 @@ from app.models.sucursal import Sucursal
 from app.models.usuario import Usuario
 
 
-def _user_headers(db, role_name: str, email: str, organization_id: int = 1) -> dict[str, str]:
+def _user_headers(db, role_name: str, email: str, organization_id: int | None = 1) -> dict[str, str]:
     role = db.query(Rol).filter(Rol.nombre == role_name).one_or_none()
     if role is None:
         role = Rol(nombre=role_name, estado="ACTIVO")
@@ -32,7 +32,10 @@ def _user_headers(db, role_name: str, email: str, organization_id: int = 1) -> d
 
 
 def _platform_headers(db) -> dict[str, str]:
-    return _user_headers(db, "ADMINISTRADOR_PLATAFORMA", "platform@example.test")
+    # Platform users are global; the fixture's default tenant context would
+    # otherwise attach the user to organization 1 during before_flush.
+    db.info.pop("organization_id", None)
+    return _user_headers(db, "ADMINISTRADOR_PLATAFORMA", "platform@example.test", organization_id=None)
 
 
 def test_organization_suspend_reactivate_are_audited_without_duplicates(db):
@@ -111,6 +114,74 @@ def test_business_profile_formats_are_validated(db):
     assert invalid_email.status_code == 422
     assert invalid_phone.status_code == 422
     assert invalid_logo.status_code == 422
+
+
+def test_platform_organization_patch_accepts_partial_updates_and_empty_optional_fields(db):
+    organization = db.get(Organizacion, 1)
+    organization.razon_social = "Elegance Boutique SRL"
+    organization.nit = "123456789"
+    organization.correo_contacto = "contacto@elegance.test"
+    organization.telefono_contacto = "+591 70000000"
+    db.commit()
+    client = TestClient(app)
+    headers = _platform_headers(db)
+
+    # This mirrors the old form payload: blank optional controls were sent
+    # alongside the changed address, including an empty logo URL.
+    address = client.patch("/api/platform/organizations/1", headers=headers, json={
+        "nombre": "FashionStore", "razon_social": "Elegance Boutique SRL", "nit": "123456789",
+        "correo_contacto": "contacto@elegance.test", "telefono_contacto": "+591 70000000",
+        "direccion": "Santa Cruz", "logo_url": "", "slug": "fashionstore",
+    })
+    assert address.status_code == 200, address.text
+    assert address.json()["direccion"] == "Santa Cruz"
+    assert address.json()["logo_url"] is None
+
+    contact = client.patch("/api/platform/organizations/1", headers=headers, json={
+        "correo_contacto": "VENTAS@ELEGANCE.TEST", "telefono_contacto": "+591 71112222",
+    })
+    assert contact.status_code == 200
+    assert contact.json()["correo_contacto"] == "ventas@elegance.test"
+    assert contact.json()["telefono_contacto"] == "+591 71112222"
+    assert contact.json()["direccion"] == "Santa Cruz"
+
+    legal = client.patch("/api/platform/organizations/1", headers=headers, json={
+        "razon_social": "Elegance Bolivia SRL", "nit": "ABC-987",
+    })
+    assert legal.status_code == 200
+    assert legal.json()["razon_social"] == "Elegance Bolivia SRL"
+    assert legal.json()["nit"] == "ABC-987"
+
+    before_reload = legal.json()
+    reloaded = client.get("/api/platform/organizations/1", headers=headers)
+    assert reloaded.status_code == 200
+    assert reloaded.json()["direccion"] == before_reload["direccion"] == "Santa Cruz"
+    assert reloaded.json()["correo_contacto"] == before_reload["correo_contacto"]
+    assert reloaded.json()["fecha_actualizacion"] == before_reload["fecha_actualizacion"]
+
+
+def test_platform_organization_patch_validates_fields_and_preserves_other_tenants(db):
+    db.add(Organizacion(id_organizacion=2, nombre="UrbanVogue", slug="urbanvogue", estado="ACTIVA",
+                        direccion="Dirección original"))
+    db.commit()
+    client = TestClient(app)
+    platform = _platform_headers(db)
+
+    updated = client.patch("/api/platform/organizations/1", headers=platform,
+                           json={"direccion": "Santa Cruz", "correo_contacto": "admin@fashion.test"})
+    assert updated.status_code == 200
+    assert client.get("/api/platform/organizations/2", headers=platform).json()["direccion"] == "Dirección original"
+
+    invalid = client.patch("/api/platform/organizations/1", headers=platform,
+                           json={"correo_contacto": "correo-inválido"})
+    assert invalid.status_code == 422
+    assert client.get("/api/platform/organizations/1", headers=platform).json()["correo_contacto"] == "admin@fashion.test"
+
+    company_admin = _user_headers(db, "ADMINISTRADOR", "tenant-admin@example.test")
+    forbidden = client.patch("/api/platform/organizations/1", headers=company_admin,
+                             json={"direccion": "No autorizado"})
+    assert forbidden.status_code == 403
+    assert client.get("/api/platform/organizations/1", headers=platform).json()["direccion"] == "Santa Cruz"
 
 
 def test_platform_admin_reads_organization_branches_and_users_without_secrets(db):

@@ -21,14 +21,14 @@ def _plan(db, code: str, *, active: bool = True) -> Plan:
     return row
 
 
-def _headers(db, role_name: str, email: str, organization_id: int = 1) -> dict[str, str]:
+def _headers(db, role_name: str, email: str, organization_id: int | None = 1) -> dict[str, str]:
     role = db.scalar(select(Rol).where(Rol.nombre == role_name))
     if role is None:
         role = Rol(nombre=role_name, estado="ACTIVO")
         db.add(role)
         db.flush()
     user = Usuario(
-        id_organizacion=organization_id,
+        id_organizacion=None if role_name == "ADMINISTRADOR_PLATAFORMA" else organization_id,
         id_rol=role.id_rol,
         nombres="Test",
         apellidos=role_name,
@@ -82,7 +82,7 @@ def test_assign_and_query_current_subscription_and_available_plans(db):
 
 def test_change_plan_finalizes_previous_and_keeps_history(db):
     db.info.pop("organization_id", None)
-    first, second = _plan(db, "ESTILO"), _plan(db, "MODA")
+    first, second, third = _plan(db, "ESTILO"), _plan(db, "MODA"), _plan(db, "GLAMOUR")
     db.commit()
     platform = _platform_headers(db)
     client = TestClient(app)
@@ -91,12 +91,54 @@ def test_change_plan_finalizes_previous_and_keeps_history(db):
     changed = client.put("/api/platform/organizations/1/subscriptions/current", headers=platform,
                          json={"plan_id": second.id_plan})
     history = client.get("/api/platform/organizations/1/subscriptions/history", headers=platform)
+    current_after_reload = client.get("/api/platform/organizations/1/subscriptions/current", headers=platform)
 
     assert initial.status_code == 201, initial.text
     assert changed.status_code == 200, changed.text
     assert changed.json()["plan_codigo"] == "MODA"
+    assert current_after_reload.status_code == 200
+    assert current_after_reload.json()["id_suscripcion"] == changed.json()["id_suscripcion"]
+    assert current_after_reload.json()["plan_codigo"] == "MODA"
     assert [row["estado"] for row in history.json()] == ["ACTIVA", "FINALIZADA"]
     assert {row["plan_codigo"] for row in history.json()} == {"ESTILO", "MODA"}
+
+    changed_again = client.put("/api/platform/organizations/1/subscriptions/current", headers=platform,
+                               json={"plan_id": third.id_plan})
+    history_after_second_change = client.get(
+        "/api/platform/organizations/1/subscriptions/history", headers=platform
+    )
+    assert changed_again.status_code == 200, changed_again.text
+    assert changed_again.json()["plan_codigo"] == "GLAMOUR"
+    assert [row["plan_codigo"] for row in history_after_second_change.json()] == ["GLAMOUR", "MODA", "ESTILO"]
+    assert [row["estado"] for row in history_after_second_change.json()] == [
+        "ACTIVA", "FINALIZADA", "FINALIZADA"
+    ]
+
+
+def test_change_rejects_missing_or_inactive_plan_without_changing_current(db):
+    db.info.pop("organization_id", None)
+    active, inactive = _plan(db, "ESTILO"), _plan(db, "INACTIVO", active=False)
+    db.commit()
+    platform = _platform_headers(db)
+    client = TestClient(app)
+    assigned = client.post("/api/platform/organizations/1/subscriptions", headers=platform,
+                           json={"plan_id": active.id_plan})
+
+    missing = client.put("/api/platform/organizations/1/subscriptions/current", headers=platform,
+                         json={"plan_id": 999999})
+    disabled = client.put("/api/platform/organizations/1/subscriptions/current", headers=platform,
+                          json={"plan_id": inactive.id_plan})
+    malformed = client.put("/api/platform/organizations/1/subscriptions/current", headers=platform,
+                           json={"plan_id": 0})
+    current = client.get("/api/platform/organizations/1/subscriptions/current", headers=platform)
+    history = client.get("/api/platform/organizations/1/subscriptions/history", headers=platform)
+
+    assert assigned.status_code == 201
+    assert missing.status_code == 404
+    assert disabled.status_code == 404
+    assert malformed.status_code == 422
+    assert current.json()["plan_codigo"] == "ESTILO"
+    assert len(history.json()) == 1
 
 
 def test_only_one_active_subscription_and_inactive_plans_cannot_be_assigned(db):
@@ -189,6 +231,8 @@ def test_subscription_queries_are_tenant_scoped_and_mutations_require_platform_a
     assert client.get("/api/platform/organizations/2/subscriptions/history", headers=company_admin).status_code == 403
     assert client.post("/api/platform/organizations/1/subscriptions", headers=company_admin,
                        json={"plan_id": plan.id_plan}).status_code == 403
+    assert client.put("/api/platform/organizations/2/subscriptions/current", headers=company_admin,
+                      json={"plan_id": plan.id_plan}).status_code == 403
     for headers in (employee, customer):
         assert client.get("/api/subscriptions/current", headers=headers).status_code == 403
         assert client.get("/api/subscriptions/plans", headers=headers).status_code == 403

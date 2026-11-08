@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.database.database import SessionLocal
 from app.database.plan_seed import seed_commercial_plans
-from app.database.seed import seed_roles
+from app.database.seed import seed_permissions, seed_roles
 from app.models.carrito import Carrito
 from app.models.carrito_detalle import CarritoDetalle
 from app.models.categoria import Categoria
@@ -407,6 +407,7 @@ def seed_demo_data(db: Session, demo_password: str) -> dict:
     db.info.pop("organization_id", None)
     db.info["skip_business_audit"] = True
     seed_roles(db)
+    seed_permissions(db)
     seed_commercial_plans(db)
     created = {"organizations": 0, "branches": 0, "subscriptions": 0, "users": 0,
                "products": 0, "variants": 0, "inventory": 0, "carts": 0,

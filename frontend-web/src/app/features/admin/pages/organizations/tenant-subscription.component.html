@@ -1,0 +1,83 @@
+<main class="subscription-page">
+  <a class="back-link" routerLink="/admin/dashboard">← Administración</a>
+  <header class="page-heading">
+    <p class="eyebrow">CUENTA DE EMPRESA</p>
+    <h1>Mi suscripción</h1>
+    <p>Consulta el plan contratado, su vigencia y el uso actual de los recursos.</p>
+  </header>
+
+  @if (loading) {
+    <p class="state-card" role="status">Cargando información de la suscripción…</p>
+  } @else if (error) {
+    <section class="state-card error" role="alert">
+      <p>{{ error }}</p><button type="button" (click)="load()">Reintentar</button>
+    </section>
+  } @else {
+    @if (subscription) {
+      <section class="current-plan" aria-labelledby="current-plan-title">
+        <div class="current-plan-copy">
+          <p class="eyebrow">PLAN CONTRATADO</p>
+          <h2 id="current-plan-title">{{ subscription.plan_nombre }}</h2>
+          <p>{{ currentPlan?.descripcion || 'Plan activo para esta organización.' }}</p>
+        </div>
+        <span class="status-badge" [class.inactive]="subscription.estado !== 'ACTIVA'">
+          <span class="status-dot"></span>{{ subscription.estado }}
+        </span>
+        <div class="validity">
+          <div><span>Inicio de vigencia</span><strong>{{ subscription.fecha_inicio | date:'mediumDate' }}</strong></div>
+          <div><span>Renovación / vencimiento</span><strong>{{ renewalLabel }}</strong></div>
+        </div>
+      </section>
+    } @else {
+      <section class="state-card"><h2>Sin suscripción activa</h2><p>La organización no tiene una suscripción activa registrada.</p></section>
+    }
+
+    @if (usage) {
+      <section class="usage-section" aria-labelledby="usage-title">
+        <div class="section-heading"><div><p class="eyebrow">USO DE RECURSOS</p><h2 id="usage-title">Consumo actual</h2></div>
+          <span class="period">{{ usage.periodo_desde || 'Período actual' }}{{ usage.periodo_hasta ? ' — ' + usage.periodo_hasta : '' }}</span>
+        </div>
+        <div class="usage-grid">
+          <article class="usage-card branch-usage">
+            <div class="usage-label"><span>Sucursales activas</span><strong>{{ usage.sucursales_activas }} <small>/ {{ usage.limite_sucursales ?? '∞' }}</small></strong></div>
+            @if (usage.limite_sucursales !== null) {
+              <div class="progress-track" role="progressbar" aria-label="Uso de sucursales" [attr.aria-valuenow]="usage.sucursales_activas" [attr.aria-valuemax]="usage.limite_sucursales">
+                <span [style.width.%]="branchUsagePercent"></span>
+              </div>
+              <p>{{ branchUsagePercent }}% del límite contratado</p>
+            } @else { <p>Sin límite de sucursales contratado.</p> }
+          </article>
+          <article class="usage-card"><span>Usuarios activos</span><strong>{{ usage.usuarios_activos }}</strong><small>Actualmente registrados</small></article>
+          <article class="usage-card"><span>Productos</span><strong>{{ usage.productos_registrados }}</strong><small>En el catálogo de la empresa</small></article>
+          <article class="usage-card"><span>Pedidos del período</span><strong>{{ usage.pedidos_periodo }}</strong><small>Actividad del período indicado</small></article>
+          <article class="usage-card"><span>Ventas del período</span><strong>Bs {{ usage.ventas_periodo }}</strong><small>Actividad del período indicado</small></article>
+          <article class="usage-card inventory-card"><span>Inventario disponible / reservado / vendido</span><strong>{{ usage.inventario_disponible }} / {{ usage.inventario_reservado }} / {{ usage.inventario_vendido }}</strong><small>Unidades registradas</small></article>
+        </div>
+      </section>
+    }
+
+    <section class="plans-section" aria-labelledby="plans-title">
+      <div class="section-heading"><div><p class="eyebrow">COMPARATIVA</p><h2 id="plans-title">Planes disponibles</h2></div></div>
+      <div class="plans-grid">
+        @for (plan of plans; track trackPlan($index, plan)) {
+          <article class="plan-card" [class.current]="plan.id_plan === subscription?.plan_id" [class.featured]="plan.codigo === 'MODA'">
+            @if (plan.id_plan === subscription?.plan_id) { <span class="current-tag">Tu plan</span> }
+            @else if (plan.codigo === 'MODA') { <span class="current-tag recommendation-tag">Más elegido</span> }
+            <p class="plan-tier">{{ plan.codigo }}</p><h3>{{ plan.nombre }}</h3><p class="plan-description">{{ plan.descripcion }}</p>
+            <div class="branch-limit"><span>Sucursales</span><strong>{{ plan.max_sucursales ?? 'Sin límite' }}</strong></div>
+            <h4>Características</h4>
+            <ul class="feature-list">
+              @for (feature of visibleFeatures(plan); track feature.codigo) {
+                <li [class.not-included]="!feature.habilitada">
+                  <span class="feature-icon" aria-hidden="true">{{ feature.habilitada ? '✓' : '–' }}</span>
+                  <span>{{ featureLabel(feature.codigo, feature.nombre) }}</span>
+                </li>
+              }
+            </ul>
+          </article>
+        }
+      </div>
+      <aside class="upgrade-note"><span class="upgrade-icon" aria-hidden="true">↗</span><p><strong>¿Necesitas más capacidades?</strong><br>La mejora o cambio de plan se gestiona con el administrador de plataforma según las condiciones comerciales vigentes.</p></aside>
+    </section>
+  }
+</main>

@@ -31,6 +31,7 @@ from app.api.audit_router import audit_router
 from app.api.sync_router import sync_router
 from app.api.exchange_router import exchange_router
 from app.api.platform_ai_router import platform_ai_router
+from app.api.loyalty_router import loyalty_router
 
 api_router = APIRouter()
 api_router.include_router(reservation_router, prefix="/api")
@@ -64,6 +65,7 @@ api_router.include_router(audit_router, prefix="/api")
 api_router.include_router(sync_router, prefix="/api")
 api_router.include_router(exchange_router, prefix="/api")
 api_router.include_router(platform_ai_router, prefix="/api")
+api_router.include_router(loyalty_router, prefix="/api")
 
 
 @api_router.get("/")

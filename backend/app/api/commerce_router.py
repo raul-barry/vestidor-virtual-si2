@@ -22,6 +22,7 @@ from app.models.usuario import Usuario
 from app.models.bitacora import Bitacora
 from app.models.movimiento_inventario import MovimientoInventario
 from app.services.pricing_service import current_price
+from app.services.loyalty_service import LoyaltyService
 
 commerce_router = APIRouter(prefix="/commerce", tags=["Operaciones comerciales"])
 cashier = require_roles("ADMINISTRADOR", "CAJERO")
@@ -196,6 +197,7 @@ class SaleLine(BaseModel):
 
 class SaleRequest(BaseModel):
     id_cliente: int | None = Field(default=None, gt=0)
+    puntos_a_canjear: int = Field(default=0, ge=0)
     tipo_cliente: Literal["CLIENTE_REGISTRADO", "CONSUMIDOR_FINAL"] = "CLIENTE_REGISTRADO"
     metodo_pago: Literal["EFECTIVO", "QR", "TARJETA"]
     nit_ci: str | None = Field(default=None, max_length=30)
@@ -247,6 +249,11 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
     )
     db.add(order)
     db.flush()
+    loyalty_result = {"points": 0, "discount": Decimal("0.00")}
+    if data.puntos_a_canjear:
+        if data.tipo_cliente != "CLIENTE_REGISTRADO" or data.id_cliente is None:
+            raise HTTPException(422, "Los puntos solo se pueden canjear con un cliente registrado.")
+        loyalty_result = LoyaltyService(db).redeem_for_order(data.id_cliente, order, data.puntos_a_canjear, user.id_usuario)
     for inv, quantity, price in rows:
         db.add(PedidoDetalle(id_pedido=order.id_pedido, id_variante=inv.id_variante, cantidad=quantity, precio_unitario=price))
         previous = inv.stock_disponible
@@ -256,8 +263,11 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
             motivo=f"Venta presencial pedido {order.id_pedido}", id_usuario=user.id_usuario))
     db.add(Pago(id_pedido=order.id_pedido, metodo_pago=data.metodo_pago, monto=order.total, estado="PAGADO"))
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Venta presencial pedido {order.id_pedido}"))
+    db.flush()
+    LoyaltyService(db).accrue_for_order(order.id_pedido, user.id_usuario)
     commit(db)
-    return record(order)
+    return {**record(order), "puntos_canjeados": loyalty_result["points"],
+            "descuento_puntos": str(loyalty_result["discount"])}
 
 
 @commerce_router.get("/returns/options")
@@ -300,11 +310,13 @@ def create_return(data: ReturnRequest, db: Session = Depends(get_db), user: Usua
         raise HTTPException(422, "Inventario incompatible con la variante vendida")
     row = Devolucion(id_usuario=user.id_usuario, **data.model_dump())
     db.add(row)
+    db.flush([row])
     previous = inv.stock_disponible
     inv.stock_disponible += data.cantidad
     db.add(MovimientoInventario(id_inventario=inv.id_inventario, tipo_movimiento="ENTRADA", cantidad=data.cantidad,
         stock_anterior=previous, stock_nuevo=inv.stock_disponible, motivo=f"Devolución pedido {detail.id_pedido}", id_usuario=user.id_usuario))
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Devolución pedido {detail.id_pedido}: {data.cantidad}"))
+    LoyaltyService(db).reverse_for_return(row.id_devolucion, user.id_usuario)
     commit(db)
     return record(row)
 
@@ -322,6 +334,8 @@ def update_return_status(
     if row.estado == "COMPLETADA" and data.estado != "COMPLETADA":
         raise HTTPException(409, "La devolución ya fue completada")
     row.estado = data.estado
+    if data.estado == "COMPLETADA":
+        LoyaltyService(db).reverse_for_return(return_id, user.id_usuario)
     db.add(Bitacora(id_usuario=user.id_usuario, accion=f"Devolución {return_id}: {data.estado}"))
     commit(db)
     return record(row)

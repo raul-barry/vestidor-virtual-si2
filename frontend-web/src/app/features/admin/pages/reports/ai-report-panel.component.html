@@ -1,9 +1,9 @@
-﻿<section class="ai-report-panel" aria-labelledby="ai-report-title">
+<section class="ai-report-panel" aria-labelledby="ai-report-title">
   <header class="panel-heading">
     <div>
-      <p class="eyebrow">ANÃLISIS EMPRESARIAL</p>
+      <p class="eyebrow">ANÁLISIS EMPRESARIAL</p>
       <h2 id="ai-report-title">Consulta tus reportes con IA</h2>
-      <p class="description">Las mÃ©tricas se calculan con los datos de tu organizaciÃ³n. Groq aporta observaciones y recomendaciones separadas.</p>
+      <p class="description">Las métricas se calculan con los datos de tu organización. Groq aporta observaciones y recomendaciones separadas.</p>
     </div>
     @if (result) {
       <button type="button" class="secondary-button" (click)="speakResult()">Escuchar resultado</button>
@@ -11,9 +11,9 @@
   </header>
 
   @if (isLoading) {
-    <p role="status">Cargando permisos y sucursalesâ€¦</p>
-  } @else if (!features?.reportes_gemini) {
-    <p class="notice" role="status">Los reportes con IA requieren la caracterÃ­stica reportes_gemini del plan contratado.</p>
+    <p role="status">Cargando permisos y sucursales…</p>
+  } @else if (!features?.reportes_ia) {
+    <p class="notice" role="status">Los reportes con IA no están incluidos en el plan contratado.</p>
   } @else {
     <form (ngSubmit)="generate()">
       <div class="filters">
@@ -38,19 +38,19 @@
         </label>
       </div>
 
-      <label class="question-label">Â¿QuÃ© quieres analizar?
+      <label class="question-label">¿Qué quieres analizar?
         <textarea name="question" [(ngModel)]="question" maxlength="500" rows="3"
-          placeholder="Ej.: Resume las ventas del perÃ­odo y seÃ±ala cambios relevantes."></textarea>
+          placeholder="Ej.: Resume las ventas del período y señala cambios relevantes."></textarea>
       </label>
 
       <div class="actions">
         <button type="submit" [disabled]="isGenerating || isListening">
-          {{ isGenerating ? 'Analizandoâ€¦' : 'Generar reporte' }}
+          {{ isGenerating ? 'Analizando…' : 'Generar reporte' }}
         </button>
         @if (features?.reportes_voz) {
           <button type="button" class="secondary-button" (click)="startVoiceReport()"
             [disabled]="isGenerating || isListening">
-            {{ isListening ? 'Escuchandoâ€¦' : 'Consultar por voz' }}
+            {{ isListening ? 'Escuchando…' : 'Consultar por voz' }}
           </button>
         }
       </div>
@@ -58,42 +58,42 @@
   }
 
   @if (error) { <p class="error" role="alert">{{ error }}</p> }
-  @if (isGenerating) { <p role="status" class="loading">Calculando mÃ©tricas y consultando Groqâ€¦</p> }
+  @if (isGenerating) { <p role="status" class="loading">Calculando métricas y consultando Groq…</p> }
 
   @if (result) {
     <div class="report-result">
-      <p class="period">PerÃ­odo analizado: {{ result.periodo.desde }} â€” {{ result.periodo.hasta }}</p>
+      <p class="period">Período analizado: {{ result.periodo.desde }} — {{ result.periodo.hasta }}</p>
       @if (features?.exportacion_pdf_excel) {
         <div class="export-actions" aria-label="Exportar reporte">
           <button type="button" class="secondary-button" (click)="exportReport('pdf')"
             [disabled]="!!exportingFormat">
-            {{ exportingFormat === 'pdf' ? 'Generando PDFâ€¦' : 'Descargar PDF' }}
+            {{ exportingFormat === 'pdf' ? 'Generando PDF…' : 'Descargar PDF' }}
           </button>
           <button type="button" class="secondary-button" (click)="exportReport('xlsx')"
             [disabled]="!!exportingFormat">
-            {{ exportingFormat === 'xlsx' ? 'Generando Excelâ€¦' : 'Descargar Excel' }}
+            {{ exportingFormat === 'xlsx' ? 'Generando Excel…' : 'Descargar Excel' }}
           </button>
         </div>
       } @else {
-        <p class="notice">La exportaciÃ³n PDF y Excel no estÃ¡ incluida en el plan actual.</p>
+        <p class="notice">La exportación PDF y Excel no está incluida en el plan actual.</p>
       }
       <section>
-        <h3>MÃ©tricas calculadas</h3>
+        <h3>Métricas calculadas</h3>
         <pre>{{ result.metricas_calculadas | json }}</pre>
       </section>
       <section>
         <h3>Observaciones de Groq</h3>
         @if (result.observaciones_ia.length) {
           <ul>@for (item of result.observaciones_ia; track $index) { <li>{{ item }}</li> }</ul>
-        } @else { <p>Groq no reportÃ³ observaciones.</p> }
+        } @else { <p>Groq no reportó observaciones.</p> }
       </section>
       <section>
         <h3>Recomendaciones generadas por IA</h3>
         @if (result.recomendaciones_ia.length) {
           <ul>@for (item of result.recomendaciones_ia; track $index) { <li>{{ item }}</li> }</ul>
-        } @else { <p>Groq no generÃ³ recomendaciones.</p> }
+        } @else { <p>Groq no generó recomendaciones.</p> }
       </section>
-      <p class="disclaimer">Las recomendaciones son generadas por IA y no sustituyen las mÃ©tricas calculadas.</p>
+      <p class="disclaimer">Las recomendaciones son generadas por IA y no sustituyen las métricas calculadas.</p>
     </div>
   }
 </section>

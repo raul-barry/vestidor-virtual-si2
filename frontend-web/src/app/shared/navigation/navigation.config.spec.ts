@@ -6,7 +6,7 @@ describe('Role navigation', () => {
     expect(isStaff('CLIENTE')).toBeFalse();
     expect(navigationGroups('CLIENTE')).toEqual([]);
     expect(homeForRole('CLIENTE')).toBe('/catalog');
-    expect(CUSTOMER_LINKS.map(x => x.path)).toEqual(['/catalog', '/recommendations', '/fitting', '/cart', '/orders', '/reservations', '/profile']);
+    expect(CUSTOMER_LINKS.map(x => x.path)).toEqual(['/catalog', '/recommendations', '/fitting', '/cart', '/orders', '/reservations', '/profile/loyalty', '/profile']);
   });
   for (const role of ['ENCARGADO', 'ENCARGADO_SUCURSAL']) {
     it('shows only operational modules for ' + role, () => {
@@ -36,7 +36,9 @@ describe('Role navigation', () => {
     const links = [...CUSTOMER_LINKS, ...['ADMINISTRADOR', 'ADMINISTRADOR_PLATAFORMA', 'ENCARGADO', 'CAJERO'].flatMap(role => navigationGroups(role).flatMap(x => x.links))];
     for (const link of links) {
       const path = link.path.slice(1);
-      const exists = path === 'admin/exchanges'
+      const exists = path === 'profile/loyalty'
+        ? routes.find(x => x.path === 'profile')?.loadChildren !== undefined
+        : path === 'admin/exchanges'
         ? routes.some(x => x.path === path)
         : path.startsWith('admin/')
           ? ADMIN_ROUTES[0].children?.some(x => x.path === path.slice(6))

@@ -47,8 +47,46 @@ export interface ReportBranch {
   nombre: string;
 }
 
+export interface BranchComparisonFilters {
+  fecha_inicio: string;
+  fecha_fin: string;
+  id_sucursal: number[];
+}
+
+export interface BranchComparisonAccess {
+  comparacion_sucursales: boolean;
+  exportacion_pdf_excel: boolean;
+}
+
+export interface BranchSalesComparison {
+  organizacion: string;
+  periodo: { desde: string; hasta: string };
+  periodo_anterior: { desde: string; hasta: string };
+  zona_horaria: string;
+  sucursales: Array<{
+    id_sucursal: number;
+    sucursal: string;
+    ranking: number;
+    ingresos_netos: string;
+    cantidad_ventas: number;
+    ticket_promedio: string;
+    ingresos_periodo_anterior: string;
+    ventas_periodo_anterior: number;
+    variacion_porcentual: string | null;
+  }>;
+  totales: { ingresos_netos: string; cantidad_ventas: number; ticket_promedio: string; variacion_porcentual: string | null };
+  destacados: {
+    mayores_ingresos: number | null;
+    mas_transacciones: number | null;
+    mayor_ticket_promedio: number | null;
+    menores_ingresos: number | null;
+  };
+}
+
 export interface ReportFeatures {
-  reportes_gemini: boolean;
+  reportes_ia: boolean;
+  /** @deprecated Compatibility alias returned during API transition. */
+  reportes_gemini?: boolean;
   reportes_voz: boolean;
   comparacion_sucursales: boolean;
   exportacion_pdf_excel: boolean;

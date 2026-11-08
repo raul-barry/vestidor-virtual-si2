@@ -138,6 +138,7 @@ class _ClientHomeState extends State<ClientHome> {
   String paymentMethod = 'QR';
   final Map<int, String> orderQrTokens = {};
   String profileEmail = '';
+  Json? loyaltySnapshot;
   double garmentScale = 1;
   double garmentOffset = 0;
   final imagePicker = ImagePicker();
@@ -860,6 +861,11 @@ class _ClientHomeState extends State<ClientHome> {
         lastName.text = profile['apellidos'];
         phone.text = profile['telefono'] ?? '';
         profileEmail = profile['correo'];
+        try {
+          loyaltySnapshot = await repository.loyalty();
+        } catch (_) {
+          loyaltySnapshot = null;
+        }
       case 'Detalle':
         if (product != null) await detail(product!);
     }
@@ -3332,6 +3338,40 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Perfil':
         return [
           Text(profileEmail, style: Theme.of(context).textTheme.titleMedium),
+          if (loyaltySnapshot != null && loyaltySnapshot!['program'] != null) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Mis puntos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    Text('${loyaltySnapshot!['balance']} puntos disponibles'),
+                    if (loyaltySnapshot!['tier'] != null)
+                      Text('Nivel ${loyaltySnapshot!['tier']['name']}'),
+                    if (loyaltySnapshot!['next_tier'] != null)
+                      Text('Te faltan ${loyaltySnapshot!['next_tier']['minimum_points'] - loyaltySnapshot!['balance']} puntos para ${loyaltySnapshot!['next_tier']['name']}.'),
+                    const SizedBox(height: 8),
+                    const Text('Los puntos se acreditan cuando la compra queda confirmada.'),
+                    for (final movement in (loyaltySnapshot!['movements'] as List? ?? const []).take(10))
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(switch (movement['kind']) {
+                          'ACUMULACION' => 'Puntos acumulados',
+                          'CANJE' => 'Canje de puntos',
+                          'REVERSO' => 'Reversión de puntos',
+                          'EXPIRACION' => 'Puntos vencidos',
+                          _ => movement['kind'].toString(),
+                        }),
+                        subtitle: Text(DateTime.tryParse(movement['created_at'] ?? '')?.toLocal().toString() ?? ''),
+                        trailing: Text('${movement['points']} pts'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           field('Nombres', firstName, limit: 100),
           field('Apellidos', lastName, limit: 100),
           field('Teléfono', phone, keyboard: TextInputType.phone, limit: 30),

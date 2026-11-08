@@ -1,9 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { FormBuilder } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of, Subject, throwError } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
 import { OrganizationAdminService } from '../../services/organization-admin.service';
 import { SubscriptionAdminService } from '../../services/subscription-admin.service';
@@ -37,13 +37,15 @@ describe('SubscriptionManagementComponent', () => {
     subscriptionService = jasmine.createSpyObj<SubscriptionAdminService>(
       'SubscriptionAdminService', ['listPlans', 'current', 'history', 'assign', 'change', 'cancel'],
     );
-    organizationService = jasmine.createSpyObj<OrganizationAdminService>('OrganizationAdminService', ['updateStatus']);
+    organizationService = jasmine.createSpyObj<OrganizationAdminService>('OrganizationAdminService', ['list', 'updateStatus']);
+    organizationService.list.and.returnValue(of([organization]));
     organizationService.updateStatus.and.returnValue(of({ ...organization, estado: 'INACTIVA' }));
     subscriptionService.current.and.returnValue(of(null));
     subscriptionService.history.and.returnValue(of([]));
+    subscriptionService.listPlans.and.returnValue(of([plan, { ...plan, id_plan: 2, codigo: 'MODA', nombre: 'Plan Moda' }]));
     dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
     dialog.open.and.returnValue({ afterClosed: () => of(true) } as never);
-    TestBed.configureTestingModule({ providers: [
+    TestBed.configureTestingModule({ imports: [NoopAnimationsModule], providers: [
       { provide: OrganizationAdminService, useValue: organizationService },
       { provide: SubscriptionAdminService, useValue: subscriptionService },
       { provide: MatDialog, useValue: dialog },
@@ -67,15 +69,96 @@ describe('SubscriptionManagementComponent', () => {
     expect(subscriptionService.history).toHaveBeenCalledWith(4);
   });
 
-  it('asks for confirmation before changing a plan', () => {
+  it('sends the selected organization and plan directly when changing a plan', () => {
     component.selected = { organization, current: subscription };
     component.planControl.setValue(2);
     subscriptionService.change.and.returnValue(of({ ...subscription, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' }));
 
     component.savePlan();
 
-    expect(dialog.open).toHaveBeenCalled();
+    expect(dialog.open).not.toHaveBeenCalled();
     expect(subscriptionService.change).toHaveBeenCalledWith(4, { plan_id: 2 });
+  });
+
+  it('submits the selected plan through the rendered form button', () => {
+    const fixture = TestBed.createComponent(SubscriptionManagementComponent);
+    fixture.detectChanges();
+    const updated = { ...subscription, id_suscripcion: 11, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' };
+    fixture.componentInstance.selected = { organization, current: subscription };
+    fixture.componentInstance.rows = [{ organization, current: subscription }];
+    fixture.componentInstance.plans = [plan, { ...plan, id_plan: 2, codigo: 'MODA', nombre: 'Plan Moda' }];
+    fixture.componentInstance.planControl.setValue(1);
+    fixture.componentInstance.planControl.setValue(2);
+    subscriptionService.change.and.returnValue(of(updated));
+    subscriptionService.current.and.returnValue(of(updated));
+    subscriptionService.history.and.returnValue(of([updated, subscription]));
+    fixture.detectChanges();
+
+    const submit = fixture.nativeElement.querySelector('.plan-form button[type="button"]') as HTMLButtonElement;
+    expect(submit.disabled).toBeFalse();
+    submit.click();
+    fixture.detectChanges();
+
+    expect(subscriptionService.change).toHaveBeenCalledWith(4, { plan_id: 2 });
+    expect(fixture.componentInstance.selected?.current?.plan_codigo).toBe('MODA');
+    fixture.destroy();
+  });
+
+  it('handles native form submission in Angular without a browser page reload', () => {
+    const fixture = TestBed.createComponent(SubscriptionManagementComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.selected = { organization, current: subscription };
+    fixture.componentInstance.rows = [{ organization, current: subscription }];
+    fixture.componentInstance.plans = [plan, { ...plan, id_plan: 2, codigo: 'MODA', nombre: 'Plan Moda' }];
+    fixture.componentInstance.planControl.setValue(2);
+    subscriptionService.change.and.returnValue(of({ ...subscription, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' }));
+    subscriptionService.current.and.returnValue(of({ ...subscription, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' }));
+    subscriptionService.history.and.returnValue(of([]));
+    fixture.detectChanges();
+
+    const form = fixture.nativeElement.querySelector('.plan-form') as HTMLFormElement;
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    form.dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(event.defaultPrevented).toBeTrue();
+    expect(subscriptionService.change).toHaveBeenCalledWith(4, { plan_id: 2 });
+    fixture.destroy();
+  });
+
+  it('shows the backend result immediately and refreshes current plan and history', () => {
+    const updated = { ...subscription, id_suscripcion: 11, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' };
+    component.selected = { organization, current: subscription };
+    component.rows = [{ organization, current: subscription }];
+    component.history = [subscription];
+    component.planControl.setValue(2);
+    subscriptionService.change.and.returnValue(of(updated));
+    subscriptionService.current.and.returnValue(of(updated));
+    subscriptionService.history.and.returnValue(of([updated, subscription]));
+
+    component.savePlan();
+
+    expect(component.selected?.current?.plan_codigo).toBe('MODA');
+    expect(component.rows[0].current?.plan_codigo).toBe('MODA');
+    expect(component.history.map(item => item.plan_codigo)).toEqual(['MODA', 'ESTILO']);
+    expect(subscriptionService.current).toHaveBeenCalledWith(4);
+    expect(subscriptionService.history).toHaveBeenCalledWith(4);
+  });
+
+  it('prevents duplicate plan changes while the confirmed request is pending', () => {
+    const response = new Subject<SubscriptionAdmin>();
+    component.selected = { organization, current: subscription };
+    component.planControl.setValue(2);
+    subscriptionService.change.and.returnValue(response);
+
+    component.savePlan();
+    component.savePlan();
+    component.savePlan();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(subscriptionService.change).toHaveBeenCalledTimes(1);
+    response.next({ ...subscription, plan_id: 2, plan_codigo: 'MODA', plan_nombre: 'Plan Moda' });
+    response.complete();
   });
 
   it('asks for confirmation before cancelling', () => {
@@ -110,7 +193,9 @@ describe('SubscriptionManagementComponent', () => {
     [409, 'La suscripción cambió. Actualiza e inténtalo nuevamente.'],
   ] as const) {
     it(`shows a clear HTTP ${status} error`, () => {
-      subscriptionService.assign.and.returnValue(throwError(() => new HttpErrorResponse({
+      component.selected = { organization, current: subscription };
+      component.planControl.setValue(2);
+      subscriptionService.change.and.returnValue(throwError(() => new HttpErrorResponse({
         status,
         error: status === 409 ? { detail: { message: expected } } : { detail: 'rejected' },
       })));
@@ -118,6 +203,7 @@ describe('SubscriptionManagementComponent', () => {
       component.savePlan();
 
       expect(component.operationError).toBe(expected);
+      expect(component.selected?.current?.plan_id).toBe(1);
     });
   }
 });

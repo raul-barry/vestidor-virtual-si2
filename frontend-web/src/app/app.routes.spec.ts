@@ -22,11 +22,17 @@ describe('application routes', () => {
   });
 
   it('protects tenant provisioning with the platform administrator guard before the organization id route', () => {
+    const list = routes.find((route) => route.path === 'platform/organizations');
     const provisioningIndex = routes.findIndex((route) => route.path === 'platform/organizations/provision');
     const detailIndex = routes.findIndex((route) => route.path === 'platform/organizations/:id');
     const provisioning = routes[provisioningIndex];
+    const detail = routes[detailIndex];
+    expect(list?.pathMatch).toBe('full');
+    expect(list?.canActivate).toContain(platformAdminGuard);
     expect(provisioning?.canActivate).toContain(platformAdminGuard);
     expect(provisioning?.loadComponent).toBeDefined();
+    expect(detail?.canActivate).toContain(platformAdminGuard);
+    expect(detail?.loadComponent).toBeDefined();
     expect(provisioningIndex).toBeLessThan(detailIndex);
   });
 

@@ -106,9 +106,10 @@ class OrganizationUpdate(BaseModel):
         value = _clean_optional(value)
         return value.lower() if isinstance(value, str) else value
 
-    @field_validator("logo_url")
+    @field_validator("logo_url", mode="before")
     @classmethod
-    def validate_logo_url(cls, value: str | None) -> str | None:
+    def validate_logo_url(cls, value: Any) -> str | None:
+        value = _clean_optional(value)
         if value is None:
             return None
         parsed = urlsplit(value)

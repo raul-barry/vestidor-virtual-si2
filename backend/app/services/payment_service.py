@@ -83,6 +83,10 @@ class PaymentService:
             self.repository.update_payment_status(payment, "PAGADO")
             payment.fecha_pago = datetime.now(timezone.utc)
             self.repository.update_order_status(order, "CONFIRMADO")
+            organization_id = self.repository.db.info.get("organization_id")
+            if organization_id is not None:
+                from app.services.loyalty_service import LoyaltyService
+                LoyaltyService(self.repository.db, organization_id).accrue_for_order(order.id_pedido)
             self.repository.db.commit()
             return self._to_response(payment)
         except SQLAlchemyError as exc:

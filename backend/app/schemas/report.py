@@ -59,8 +59,36 @@ class ReportBranchResponse(BaseModel):
     nombre: str
 
 
+class BranchComparisonAccessResponse(BaseModel):
+    comparacion_sucursales: bool
+    exportacion_pdf_excel: bool
+
+
+class BranchSalesComparisonRow(BaseModel):
+    id_sucursal: int
+    sucursal: str
+    ranking: int
+    ingresos_netos: Decimal
+    cantidad_ventas: int
+    ticket_promedio: Decimal
+    ingresos_periodo_anterior: Decimal
+    ventas_periodo_anterior: int
+    variacion_porcentual: Decimal | None
+
+
+class BranchSalesComparisonResponse(BaseModel):
+    organizacion: str
+    periodo: dict[str, date]
+    periodo_anterior: dict[str, date]
+    sucursales: list[BranchSalesComparisonRow]
+    totales: dict[str, Decimal | int | None]
+    destacados: dict[str, int | None]
+    zona_horaria: str
+
+
 class ReportFeaturesResponse(BaseModel):
-    reportes_gemini: bool
+    reportes_ia: bool
+    reportes_gemini: bool | None = None  # Deprecated compatibility alias.
     reportes_voz: bool
     comparacion_sucursales: bool
     exportacion_pdf_excel: bool

@@ -15,7 +15,7 @@ import { OutboxSyncService } from '../../core/services/outbox-sync.service';
       <fieldset><legend>Tipo de cliente</legend>
         <label><input type="radio" name="customerType" [(ngModel)]="customerType" value="CLIENTE_REGISTRADO" (ngModelChange)="clearCustomer()"> Cliente registrado</label>
         <label><input type="radio" name="customerType" [(ngModel)]="customerType" value="CONSUMIDOR_FINAL" (ngModelChange)="clearCustomer()"> Consumidor final</label>
-        @if(customerType==='CLIENTE_REGISTRADO'){<label>Cliente<select [(ngModel)]="customerId"><option [ngValue]="0">Seleccionar cliente</option>@for(c of customers;track c.id_cliente){<option [ngValue]="c.id_cliente">{{c.nombre}}</option>}</select></label>}
+        @if(customerType==='CLIENTE_REGISTRADO'){<label>Cliente<select [(ngModel)]="customerId" (ngModelChange)="refreshLoyalty()"><option [ngValue]="0">Seleccionar cliente</option>@for(c of customers;track c.id_cliente){<option [ngValue]="c.id_cliente">{{c.nombre}}</option>}</select></label>}
       </fieldset>
       <fieldset><legend>Facturación</legend>
         <label><input type="checkbox" [(ngModel)]="invoice" (ngModelChange)="clearInvoice()"> Requiere datos de facturación</label>
@@ -29,7 +29,8 @@ import { OutboxSyncService } from '../../core/services/outbox-sync.service';
         <label>Cantidad<input name="quantity" type="number" [(ngModel)]="quantity" min="1"></label><button [disabled]="!inventoryId">Agregar</button>
       </form>
       <table><tr><th>Prenda</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>@for(line of lines;track line.id_inventario){<tr><td>{{line.producto}} · {{line.talla}} · {{line.color}}</td><td>{{line.cantidad}}</td><td>Bs {{line.cantidad * line.precio | number:'1.2-2'}}</td><td><button (click)="remove(line.id_inventario)">Quitar</button></td></tr>}</table>
-      <p>Total: <strong>Bs {{total | number:'1.2-2'}}</strong></p>
+      @if(loyaltyEnabled && customerType==='CLIENTE_REGISTRADO' && online){<fieldset><legend>Puntos del cliente</legend><p>Saldo: {{loyaltyBalance}} puntos</p><label>Puntos a canjear<input type="number" min="0" [(ngModel)]="pointsToRedeem" (ngModelChange)="estimateLoyalty()"></label>@if(loyaltyDiscount){<p>Descuento estimado: Bs {{loyaltyDiscount | number:'1.2-2'}}</p>}@if(loyaltyError){<p class="notice">{{loyaltyError}}</p>}</fieldset>}
+      <p>Subtotal: Bs {{subtotal | number:'1.2-2'}} · Descuento de puntos: Bs {{loyaltyDiscount | number:'1.2-2'}}</p><p>Total: <strong>Bs {{total | number:'1.2-2'}}</strong></p>
       <label>Método de pago<select [(ngModel)]="paymentMethod"><option>EFECTIVO</option><option [disabled]="!online">QR</option><option [disabled]="!online">TARJETA</option></select></label>
       @if(paymentMethod==='EFECTIVO'){<label>Efectivo recibido<input type="number" min="0" step="0.01" [(ngModel)]="cashReceived"></label>}
       <button (click)="sell()" [disabled]="busy || !lines.length">{{busy?'Registrando…':online?'Confirmar venta y pago':'Guardar venta pendiente'}}</button>
@@ -55,6 +56,11 @@ export class PosComponent implements OnInit, OnDestroy {
   busy = false;
   message = '';
   online = navigator.onLine;
+  loyaltyEnabled = false;
+  loyaltyBalance = 0;
+  pointsToRedeem = 0;
+  loyaltyDiscount = 0;
+  loyaltyError = '';
 
   ngOnInit(): void {
     window.addEventListener('online', this.connectivityListener);
@@ -82,6 +88,7 @@ export class PosComponent implements OnInit, OnDestroy {
         this.message = this.inventory.length ? 'No se pudo actualizar. Se usan las opciones descargadas anteriormente.' : 'No fue posible cargar las opciones de venta; conecta el equipo para descargarlas.';
       }
     });
+    this.api.get<any>('/api/loyalty/pos/status').subscribe({next:r=>this.loyaltyEnabled=!!r.enabled,error:()=>this.loyaltyEnabled=false});
   }
 
   private async loadCachedOptions(): Promise<void> {
@@ -94,9 +101,12 @@ export class PosComponent implements OnInit, OnDestroy {
       .map(item => ({ id_sucursal: item.id_sucursal, nombre: item.sucursal }));
   }
   get branchInventory(): any[] { return this.inventory.filter(item => Number(item.id_sucursal) === Number(this.branchId)); }
-  get total(): number { return this.lines.reduce((sum, item) => sum + item.cantidad * Number(item.precio), 0); }
-  clearCustomer(): void { this.customerId = 0; }
-  clearLines(): void { this.lines = []; this.inventoryId = 0; }
+  get subtotal(): number { return this.lines.reduce((sum, item) => sum + item.cantidad * Number(item.precio), 0); }
+  get total(): number { return Math.max(0, this.subtotal - this.loyaltyDiscount); }
+  clearCustomer(): void { this.customerId = 0; this.pointsToRedeem=0;this.loyaltyDiscount=0;this.loyaltyBalance=0; }
+  refreshLoyalty(): void {this.pointsToRedeem=0;this.loyaltyDiscount=0;this.loyaltyBalance=0;this.loyaltyError='';if(this.customerId)this.api.get<any>(`/api/loyalty/pos/customer/${this.customerId}`).subscribe({next:r=>this.loyaltyBalance=r.balance,error:()=>this.loyaltyEnabled=false});}
+  estimateLoyalty(): void {this.loyaltyDiscount=0;this.loyaltyError='';if(!this.customerId||!this.pointsToRedeem||!this.subtotal)return;this.api.post<any>('/api/loyalty/pos/estimate',{customer_id:this.customerId,amount:this.subtotal,points:Number(this.pointsToRedeem)}).subscribe({next:r=>{this.pointsToRedeem=Number(r.points);this.loyaltyDiscount=Number(r.discount);this.loyaltyBalance=Number(r.balance);},error:e=>{this.loyaltyError=e.error?.detail??'No se pudo estimar el canje.';}});}
+  clearLines(): void { this.lines = []; this.inventoryId = 0; this.estimateLoyalty(); }
   clearInvoice(): void { if (!this.invoice) { this.nitCi = ''; this.businessName = ''; } }
 
   add(): void {
@@ -105,8 +115,9 @@ export class PosComponent implements OnInit, OnDestroy {
     const line = this.lines.find(row => row.id_inventario === item.id_inventario);
     if ((line?.cantidad || 0) + this.quantity > item.stock) { this.message = 'Stock descargado insuficiente; se validará nuevamente al sincronizar.'; return; }
     line ? line.cantidad += this.quantity : this.lines.push({ ...item, cantidad: Number(this.quantity) });
+    this.estimateLoyalty();
   }
-  remove(id: number): void { this.lines = this.lines.filter(item => item.id_inventario !== id); }
+  remove(id: number): void { this.lines = this.lines.filter(item => item.id_inventario !== id); this.estimateLoyalty(); }
 
   private valid(): boolean {
     if (this.customerType === 'CLIENTE_REGISTRADO' && !this.customerId) { this.message = 'Seleccione un cliente registrado'; return false; }
@@ -128,6 +139,9 @@ export class PosComponent implements OnInit, OnDestroy {
     if (!navigator.onLine && this.paymentMethod !== 'EFECTIVO') {
       this.busy = false; this.message = 'Las ventas offline solo admiten efectivo.'; return;
     }
+    if (!navigator.onLine && this.pointsToRedeem > 0) {
+      this.busy = false; this.message = 'El canje de puntos requiere conexión. No se descontaron puntos.'; return;
+    }
     if (this.paymentMethod === 'EFECTIVO') {
       try {
         const queued = await this.outbox.queuePosCashSale(common);
@@ -147,7 +161,7 @@ export class PosComponent implements OnInit, OnDestroy {
       return;
     }
     this.api.post<any>('/api/commerce/pos', {
-      id_cliente: common.id_cliente, tipo_cliente: this.customerType, metodo_pago: this.paymentMethod,
+      id_cliente: common.id_cliente, puntos_a_canjear:Number(this.pointsToRedeem||0), tipo_cliente: this.customerType, metodo_pago: this.paymentMethod,
       nit_ci: common.nit_ci, razon_social: common.razon_social, tipo_entrega: 'RECOJO_SUCURSAL',
       id_sucursal_entrega: this.branchId, items: this.lines.map(item => ({ id_inventario: item.id_inventario, cantidad: item.cantidad }))
     }).subscribe({

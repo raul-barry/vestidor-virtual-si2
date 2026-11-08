@@ -73,7 +73,7 @@ export class AiReportPanelComponent implements OnInit {
   }
 
   generate(channel: 'texto' | 'voz' = 'texto'): void {
-    if (this.isGenerating || !this.features?.reportes_gemini) return;
+    if (this.isGenerating || !this.features?.reportes_ia) return;
     if (channel === 'voz' && !this.features.reportes_voz) {
       this.error = 'Los reportes por voz no están incluidos en el plan actual.';
       return;

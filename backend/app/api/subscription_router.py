@@ -18,24 +18,26 @@ subscription_router = APIRouter(tags=["Suscripciones SaaS"])
 
 
 def _plan_response(plan) -> dict:
+    canonical_ai = next((feature for feature in plan.caracteristicas if feature.codigo == "reportes_ia"), None)
+    features = []
+    for feature in plan.caracteristicas:
+        if feature.codigo == "reportes_gemini":
+            if canonical_ai is not None:
+                continue
+            code, name, description = "reportes_ia", "Reportes con IA", "Reportes empresariales asistidos por inteligencia artificial."
+        else:
+            code, name, description = feature.codigo, feature.nombre, feature.descripcion
+        features.append({"id_plan_caracteristica": feature.id_plan_caracteristica,
+                         "codigo": code, "nombre": name, "descripcion": description,
+                         "habilitada": feature.habilitada, "limite": feature.limite,
+                         "configuracion": feature.configuracion})
     return {
         "id_plan": plan.id_plan,
         "codigo": plan.codigo,
         "nombre": plan.nombre,
         "descripcion": plan.descripcion,
         "max_sucursales": plan.max_sucursales,
-        "caracteristicas": [
-            {
-                "id_plan_caracteristica": feature.id_plan_caracteristica,
-                "codigo": feature.codigo,
-                "nombre": feature.nombre,
-                "descripcion": feature.descripcion,
-                "habilitada": feature.habilitada,
-                "limite": feature.limite,
-                "configuracion": feature.configuracion,
-            }
-            for feature in plan.caracteristicas
-        ],
+        "caracteristicas": features,
     }
 
 

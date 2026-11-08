@@ -17,7 +17,7 @@ from app.models.inventario import Inventario
 from app.models.recurso_virtual import RecursoVirtual
 from app.models.producto import Producto
 from app.models.producto_variante import ProductoVariante
-from app.models.rol import Rol
+from app.models.rol import Permiso, Rol
 from app.models.sucursal import Sucursal
 from app.models.talla import Talla
 from app.models.usuario import Usuario
@@ -59,6 +59,17 @@ def seed_roles(db: Session, role_names: Iterable[str] = INITIAL_ROLES) -> int:
         db.flush()
 
     return len(roles_to_create)
+
+
+def seed_permissions(db: Session) -> int:
+    """Register stable permissions that platform admins can assign to custom roles."""
+    code = "REPORTES_COMPARATIVOS"
+    permission = db.scalar(select(Permiso).where(Permiso.codigo == code))
+    if permission is not None:
+        return 0
+    db.add(Permiso(codigo=code, descripcion="Consultar comparación comercial de sucursales asignadas"))
+    db.flush()
+    return 1
 
 
 def _get_or_create_named(db: Session, model, nombre: str, **values) -> tuple[object, bool]:
@@ -259,7 +270,7 @@ def seed_initial_data(db: Session) -> dict[str, int]:
         db.add(organization)
         db.flush()
     db.info["organization_id"] = organization.id_organizacion
-    created = {"roles": seed_roles(db)}
+    created = {"roles": seed_roles(db), "permisos": seed_permissions(db)}
     created["planes_comerciales"] = seed_commercial_plans(db)
     created["usuarios"] = _seed_users(db)
     created.update(_seed_catalog(db))
@@ -301,7 +312,7 @@ def main() -> None:
         parser.error("Demo data is disabled in production; use --roles-only")
     db = SessionLocal()
     try:
-        created = {"roles": seed_roles(db)} if args.roles_only else seed_initial_data(db)
+        created = {"roles": seed_roles(db), "permisos": seed_permissions(db)} if args.roles_only else seed_initial_data(db)
         db.commit()
         print(f"Seed completado: {created}")
     except SQLAlchemyError:

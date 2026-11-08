@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { OrganizationUsage } from '../models/organization-usage.model';
 import { SubscriptionAdmin, SubscriptionPlanAdmin, SubscriptionRequestAdmin } from '../models/subscription-admin.model';
 
 @Injectable({ providedIn: 'root' })
@@ -17,8 +18,8 @@ export class SubscriptionAdminService {
     return this.api.get<SubscriptionAdmin | null>(`${this.base}/subscriptions/current`);
   }
 
-  usageForMyOrganization(): Observable<unknown> {
-    return this.api.get<unknown>(`${this.base}/organizations/me/usage`);
+  usageForMyOrganization(): Observable<OrganizationUsage> {
+    return this.api.get<OrganizationUsage>(`${this.base}/organizations/me/usage`);
   }
 
   current(organizationId: number): Observable<SubscriptionAdmin | null> {

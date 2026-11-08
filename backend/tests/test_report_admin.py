@@ -238,6 +238,7 @@ def test_report_plan_gates_voice_and_exposes_plan_features(db, monkeypatch) -> N
     })
 
     assert features.status_code == 200
+    assert features.json()["reportes_ia"] is True
     assert features.json()["reportes_gemini"] is True
     assert features.json()["reportes_voz"] is False
     assert voice.status_code == 403

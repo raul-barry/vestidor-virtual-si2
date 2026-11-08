@@ -48,11 +48,15 @@ class PlanAdminService:
             select(PlanCaracteristica).where(PlanCaracteristica.plan_id == plan_id).with_for_update()
         ).all()}
         requested = data.caracteristicas
-        missing = [item.codigo for item in requested if item.codigo not in features]
+        requested_codes = {
+            item.codigo: ("reportes_gemini" if item.codigo == "reportes_ia" and "reportes_ia" not in features else item.codigo)
+            for item in requested
+        }
+        missing = [item.codigo for item in requested if requested_codes[item.codigo] not in features]
         if missing:
             raise AppException(f"Características no encontradas en este plan: {', '.join(missing)}", status_code=404)
         for item in requested:
-            feature = features[item.codigo]
+            feature = features[requested_codes[item.codigo]]
             for field, value in item.model_dump(exclude_unset=True, exclude={"codigo"}).items():
                 setattr(feature, field, value)
         plan.fecha_actualizacion = datetime.now(timezone.utc)

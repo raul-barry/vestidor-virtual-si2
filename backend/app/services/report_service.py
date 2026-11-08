@@ -1,9 +1,11 @@
 from datetime import date, datetime, time, timezone
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.repositories.report_repository import ReportRepository
+from app.models.organizacion import Organizacion
 from app.schemas.report import (
     CategoryRankingResponse,
     CustomerReportResponse,
@@ -99,6 +101,85 @@ class ReportService:
             clientes_activos=active_clients,
             clientes_nuevos_mes=new_clients,
             clientes_con_compras=clients_with_orders,
+        )
+
+    def branch_sales_comparison(
+        self, id_usuario: int, organization: Organizacion, fecha_inicio: date | None,
+        fecha_fin: date | None, branch_ids: list[int] | None = None,
+        scoped_branch_id: int | None = None,
+    ):
+        from decimal import Decimal
+        from fastapi import HTTPException
+        from app.schemas.report import BranchSalesComparisonResponse, BranchSalesComparisonRow
+
+        today = datetime.now(timezone(timedelta(hours=-4))).date()
+        end = fecha_fin or today
+        start = fecha_inicio or end - timedelta(days=29)
+        start, end = self._date_range(start, end)
+        if (end - start).days > 365:
+            raise HTTPException(422, detail="El período no puede superar 366 días")
+        requested = list(dict.fromkeys(branch_ids or []))
+        if scoped_branch_id is not None:
+            if requested and any(branch_id != scoped_branch_id for branch_id in requested):
+                raise HTTPException(403, detail="Sucursal fuera del alcance asignado")
+            requested = [scoped_branch_id]
+        if requested and any(not self.repository.validate_branch(branch_id) for branch_id in requested):
+            raise HTTPException(404, detail="Sucursal no encontrada")
+
+        previous_end = start - timedelta(days=1)
+        previous_start = previous_end - (end - start)
+        raw = self.repository.branch_sales_comparison(start, end, requested or None)
+        rows = []
+        for branch_id, name, count, revenue, previous_count, previous_revenue in raw:
+            revenue = Decimal(str(revenue or 0))
+            previous_revenue = Decimal(str(previous_revenue or 0))
+            count = int(count or 0)
+            previous_count = int(previous_count or 0)
+            variation = (
+                ((revenue - previous_revenue) * Decimal("100") / abs(previous_revenue)).quantize(Decimal("0.01"))
+                if previous_revenue != 0 else None
+            )
+            rows.append({
+                "id_sucursal": branch_id, "sucursal": name, "cantidad_ventas": count,
+                "ingresos_netos": revenue, "ticket_promedio": revenue / count if count else Decimal("0"),
+                "ventas_periodo_anterior": previous_count, "ingresos_periodo_anterior": previous_revenue,
+                "variacion_porcentual": variation,
+            })
+        rows.sort(key=lambda row: (-row["ingresos_netos"], row["sucursal"].casefold()))
+        for ranking, row in enumerate(rows, 1):
+            row["ranking"] = ranking
+        total_revenue = sum((row["ingresos_netos"] for row in rows), Decimal("0"))
+        total_sales = sum(row["cantidad_ventas"] for row in rows)
+        previous_total = sum((row["ingresos_periodo_anterior"] for row in rows), Decimal("0"))
+        total_variation = (
+            ((total_revenue - previous_total) * Decimal("100") / abs(previous_total)).quantize(Decimal("0.01"))
+            if previous_total != 0 else None
+        )
+        def top_id(key: str, *, reverse: bool = True):
+            if not rows:
+                return None
+            if reverse and not any(row[key] > 0 for row in rows):
+                return None
+            return sorted(rows, key=lambda row: ((-row[key] if reverse else row[key]), row["sucursal"].casefold()))[0]["id_sucursal"]
+
+        self._audit(id_usuario, "comparación de ventas por sucursal")
+        return BranchSalesComparisonResponse(
+            organizacion=organization.nombre,
+            periodo={"desde": start, "hasta": end},
+            periodo_anterior={"desde": previous_start, "hasta": previous_end},
+            sucursales=[BranchSalesComparisonRow(**row) for row in rows],
+            totales={
+                "ingresos_netos": total_revenue, "cantidad_ventas": total_sales,
+                "ticket_promedio": total_revenue / total_sales if total_sales else Decimal("0"),
+                "variacion_porcentual": total_variation,
+            },
+            destacados={
+                "mayores_ingresos": top_id("ingresos_netos"),
+                "mas_transacciones": top_id("cantidad_ventas"),
+                "mayor_ticket_promedio": top_id("ticket_promedio"),
+                "menores_ingresos": top_id("ingresos_netos", reverse=False),
+            },
+            zona_horaria="UTC-04:00",
         )
 
     @staticmethod

@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, inject } from '@angular/core';
-import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -29,7 +29,7 @@ interface SubscriptionRow {
   selector: 'app-subscription-management',
   standalone: true,
   imports: [
-    DatePipe, RouterLink, ReactiveFormsModule, MatButtonModule, MatCardModule, MatDialogModule,
+    DatePipe, RouterLink, FormsModule, ReactiveFormsModule, MatButtonModule, MatCardModule, MatDialogModule,
     MatFormFieldModule, MatSelectModule, MatSnackBarModule, ErrorMessageComponent, LoadingSpinnerComponent,
   ],
   template: `
@@ -99,7 +99,7 @@ interface SubscriptionRow {
                   </mat-form-field>
                   @if (selected.current) { <p class="notice">El cambio finaliza el plan actual y conserva su registro en el historial.</p> }
                   @if (operationError) { <p class="error" role="alert">{{operationError}}</p> }
-                  <button mat-flat-button color="primary" type="submit" [disabled]="busy || planControl.invalid || plansLoading || planUnchanged">
+                  <button mat-flat-button color="primary" type="button" (click)="savePlan()" [disabled]="busy || planControl.invalid || plansLoading || planUnchanged">
                     {{busy ? 'Procesando…' : (selected.current ? 'Cambiar plan' : (history.length ? 'Renovar suscripción' : 'Asignar plan'))}}
                   </button>
                 </form>
@@ -148,6 +148,7 @@ export class SubscriptionManagementComponent implements OnInit {
   detailsLoading = false;
   historyLoading = false;
   busy = false;
+  private planChangePending = false;
   pageError = '';
   historyError = '';
   operationError = '';
@@ -211,24 +212,15 @@ export class SubscriptionManagementComponent implements OnInit {
   }
 
   savePlan(): void {
-    if (!this.selected) return;
+    if (!this.selected || this.planChangePending || this.busy) return;
     if (this.planControl.invalid || this.planControl.value === null) {
       this.planControl.markAsTouched();
       return;
     }
     const selected = this.selected;
     const request: SubscriptionRequestAdmin = { plan_id: this.planControl.value };
-    if (!selected.current) {
-      this.performPlanChange(selected, request, false);
-      return;
-    }
-    const nextPlan = this.plans.find((plan) => plan.id_plan === request.plan_id);
-    this.dialog.open(ConfirmDialogComponent, { data: {
-      title: 'Cambiar plan',
-      message: `¿Confirmas cambiar ${selected.organization.nombre} de ${selected.current.plan_nombre} a ${nextPlan?.nombre ?? 'el plan seleccionado'}? El plan actual pasará al historial.`,
-    } }).afterClosed().subscribe((confirmed) => {
-      if (confirmed) this.performPlanChange(selected, request, true);
-    });
+    this.planChangePending = true;
+    this.performPlanChange(selected, request, !!selected.current);
   }
 
   confirmCancel(): void {
@@ -274,18 +266,27 @@ export class SubscriptionManagementComponent implements OnInit {
   }
 
   private performPlanChange(row: SubscriptionRow, request: SubscriptionRequestAdmin, changing: boolean): void {
+    if (this.busy) {
+      this.planChangePending = false;
+      return;
+    }
     this.busy = true;
     this.operationError = '';
     const request$ = changing
       ? this.subscriptions.change(row.organization.id_organizacion, request)
       : this.subscriptions.assign(row.organization.id_organizacion, request);
     request$.subscribe({
-      next: () => {
+      next: (updated) => {
         this.busy = false;
+        this.planChangePending = false;
+        const refreshed = { ...row, current: updated };
+        this.rows = this.rows.map((item) => item.organization.id_organizacion === row.organization.id_organizacion ? refreshed : item);
+        this.selected = refreshed;
+        this.planControl.setValue(updated.plan_id);
         this.snack.open(changing ? 'Plan actualizado.' : (this.history.length ? 'Suscripción renovada.' : 'Plan asignado.'), 'Cerrar', { duration: 3500 });
         this.refreshSelected();
       },
-      error: (error: HttpErrorResponse) => { this.busy = false; this.operationError = this.errorMessage(error); },
+      error: (error: HttpErrorResponse) => { this.busy = false; this.planChangePending = false; this.operationError = this.errorMessage(error); },
     });
   }
 

@@ -10,6 +10,7 @@ export const ADMIN_ROUTES: Routes = [
     children: [
       { path: 'security', loadComponent: () => import('./pages/security-overview.component').then(c => c.SecurityOverviewComponent) },
       { path: 'subscription', loadComponent: () => import('./pages/organizations/tenant-subscription.component').then(c => c.TenantSubscriptionComponent) },
+      { path: 'loyalty', loadComponent: () => import('./pages/loyalty/loyalty-admin.component').then(c => c.LoyaltyAdminComponent) },
       ...['cities', 'promotions', 'returns'].map(mode => ({ path: mode, data: {mode}, loadComponent: () => import('../commerce/commerce.component').then(c => c.CommerceComponent) })),
       { path: 'audit', loadComponent: () => import('./pages/audit/audit.component').then(c => c.AuditComponent) },
       { path: 'financial-reconciliation', loadComponent: () => import('./pages/financial-reconciliation/financial-reconciliation.component').then(c => c.FinancialReconciliationComponent) },

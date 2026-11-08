@@ -26,7 +26,7 @@ COMMON_FEATURES = (
 MODA_FEATURES = (
     ("operaciones_offline", "Operaciones offline", "Registro de operaciones sin conexión."),
     ("sincronizacion", "Sincronización", "Sincronización de operaciones pendientes."),
-    ("reportes_gemini", "Reportes Gemini", "Reportes asistidos por Gemini."),
+    ("reportes_ia", "Reportes con IA", "Reportes empresariales asistidos por inteligencia artificial."),
     ("exportacion_pdf_excel", "Exportación PDF y Excel", "Exportación de reportes a PDF y Excel."),
     ("comparacion_sucursales", "Comparación entre sucursales", "Comparación de indicadores entre sucursales."),
 )
@@ -68,12 +68,20 @@ def seed_commercial_plans(db: Session) -> int:
         for feature_code, name, description in features:
             if feature_code in existing:
                 continue
+            legacy_ai = None
+            if feature_code == "reportes_ia" and "reportes_gemini" in existing:
+                legacy_ai = db.scalar(select(PlanCaracteristica).where(
+                    PlanCaracteristica.plan_id == plan.id_plan,
+                    PlanCaracteristica.codigo == "reportes_gemini",
+                ))
             db.add(PlanCaracteristica(
                 plan_id=plan.id_plan,
                 codigo=feature_code,
                 nombre=name,
                 descripcion=description,
-                habilitada=True,
+                habilitada=legacy_ai.habilitada if legacy_ai else True,
+                limite=legacy_ai.limite if legacy_ai else None,
+                configuracion=legacy_ai.configuracion if legacy_ai else None,
             ))
             created += 1
 

@@ -10,6 +10,7 @@ from app.models.cliente import Cliente
 from app.models.inventario import Inventario
 from app.models.movimiento_inventario import MovimientoInventario
 from app.models.pago import Pago
+from app.models.payment_refund import PaymentRefund
 from app.models.pedido import Pedido
 from app.models.pedido_detalle import PedidoDetalle
 from app.models.producto import Producto
@@ -273,6 +274,91 @@ class ReportRepository:
             statement = statement.where(Sucursal.id_sucursal == branch_id)
         return [(id_branch, name, count or 0, total or Decimal("0"))
                 for id_branch, name, count, total in self.db.execute(statement).all()]
+
+    def branch_sales_comparison(
+        self, start: date, end: date, branch_ids: list[int] | None = None,
+    ) -> list[tuple]:
+        """Aggregate paid sales and completed monetary refunds once per branch."""
+        business_zone = timezone(timedelta(hours=-4))
+
+        def bounds(period_start: date, period_end: date):
+            start_utc = datetime.combine(period_start, time.min, business_zone).astimezone(timezone.utc)
+            end_utc = datetime.combine(period_end + timedelta(days=1), time.min, business_zone).astimezone(timezone.utc)
+            return start_utc, end_utc
+
+        previous_length = (end - start).days + 1
+        previous_end = start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=previous_length - 1)
+
+        def paid_totals(period_start: date, period_end: date, prefix: str):
+            lower, upper = bounds(period_start, period_end)
+            eligible = and_(
+                Pedido.id_sucursal_entrega == Sucursal.id_sucursal,
+                Pedido.fecha_pedido >= lower,
+                Pedido.fecha_pedido < upper,
+                Pedido.estado.in_(("CONFIRMADO", "PREPARANDO", "ENVIADO", "ENTREGADO")),
+                Pago.estado == "PAGADO",
+            )
+            return (
+                select(
+                    Pedido.id_sucursal_entrega.label("branch_id"),
+                    func.count(distinct(Pedido.id_pedido)).label(f"{prefix}_count"),
+                    func.coalesce(func.sum(Pago.monto), Decimal("0")).label(f"{prefix}_gross"),
+                )
+                .select_from(Pedido)
+                .join(Pago, Pago.id_pedido == Pedido.id_pedido)
+                .join(Sucursal, Sucursal.id_sucursal == Pedido.id_sucursal_entrega)
+                .where(Sucursal.id_organizacion == self.organization_id, eligible)
+                .group_by(Pedido.id_sucursal_entrega)
+                .subquery()
+            )
+
+        def refund_totals(period_start: date, period_end: date, prefix: str):
+            lower, upper = bounds(period_start, period_end)
+            return (
+                select(
+                    Pedido.id_sucursal_entrega.label("branch_id"),
+                    func.coalesce(func.sum(PaymentRefund.amount), Decimal("0")).label(f"{prefix}_refund"),
+                )
+                .select_from(PaymentRefund)
+                .join(Pedido, Pedido.id_pedido == PaymentRefund.order_id)
+                .join(Sucursal, Sucursal.id_sucursal == Pedido.id_sucursal_entrega)
+                .where(
+                    PaymentRefund.organization_id == self.organization_id,
+                    PaymentRefund.state == "DEVOLUCION_COMPLETADA",
+                    Pedido.fecha_pedido >= lower,
+                    Pedido.fecha_pedido < upper,
+                    Pedido.estado.in_(("CONFIRMADO", "PREPARANDO", "ENVIADO", "ENTREGADO")),
+                    Sucursal.id_organizacion == self.organization_id,
+                )
+                .group_by(Pedido.id_sucursal_entrega)
+                .subquery()
+            )
+
+        current = paid_totals(start, end, "current")
+        previous = paid_totals(previous_start, previous_end, "previous")
+        current_refunds = refund_totals(start, end, "current")
+        previous_refunds = refund_totals(previous_start, previous_end, "previous")
+        statement = (
+            select(
+                Sucursal.id_sucursal,
+                Sucursal.nombre,
+                func.coalesce(current.c.current_count, 0),
+                func.coalesce(current.c.current_gross, 0) - func.coalesce(current_refunds.c.current_refund, 0),
+                func.coalesce(previous.c.previous_count, 0),
+                func.coalesce(previous.c.previous_gross, 0) - func.coalesce(previous_refunds.c.previous_refund, 0),
+            )
+            .select_from(Sucursal)
+            .outerjoin(current, current.c.branch_id == Sucursal.id_sucursal)
+            .outerjoin(previous, previous.c.branch_id == Sucursal.id_sucursal)
+            .outerjoin(current_refunds, current_refunds.c.branch_id == Sucursal.id_sucursal)
+            .outerjoin(previous_refunds, previous_refunds.c.branch_id == Sucursal.id_sucursal)
+            .where(Sucursal.id_organizacion == self.organization_id, Sucursal.estado == "ACTIVA")
+        )
+        if branch_ids:
+            statement = statement.where(Sucursal.id_sucursal.in_(branch_ids))
+        statement = statement.order_by(Sucursal.nombre)
+        return [tuple(row) for row in self.db.execute(statement).all()]
 
     def predictive_daily_product_sales(
         self, start: date, end: date, branch_id: int | None = None,

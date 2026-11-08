@@ -241,6 +241,8 @@ def create_offline_sale(db: Session, actor: SyncActor, payload: dict[str, Any]) 
         payment.fecha_pago = datetime.now(timezone.utc)
         consume_order_stock(db, order)
         order.estado = "CONFIRMADO"
+        from app.services.loyalty_service import LoyaltyService
+        LoyaltyService(db, actor.organization_id).accrue_for_order(order.id_pedido, actor.user_id)
     for line in accepted:
         line["reservas"] = reservations_by_line.get(line["client_line_id"], [])
     AuditService.record(

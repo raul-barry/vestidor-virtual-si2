@@ -121,7 +121,16 @@ export class OrganizationListComponent implements OnInit {
     });
   }
 
-  openDetail(row: OrganizationAdmin): void { void this.router.navigate(['/platform/organizations', row.id_organizacion]); }
+  openDetail(row: OrganizationAdmin): void {
+    const organizationId = Number(row.id_organizacion);
+    if (!Number.isInteger(organizationId) || organizationId < 1) {
+      this.snack.open('No se pudo identificar la empresa seleccionada.', 'Cerrar', { duration: 5000 });
+      return;
+    }
+    void this.router.navigate(['/platform/organizations', organizationId]).then((navigated) => {
+      if (!navigated) this.snack.open('No se pudo abrir el detalle de la empresa.', 'Cerrar', { duration: 5000 });
+    }).catch(() => this.snack.open('No se pudo abrir el detalle de la empresa.', 'Cerrar', { duration: 5000 }));
+  }
 
   openSubscriptions(): void { void this.router.navigate(['/platform/subscriptions']); }
 

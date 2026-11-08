@@ -17,7 +17,8 @@ def _headers(db, role_name: str, email: str):
         role = Rol(nombre=role_name, estado="ACTIVO")
         db.add(role)
         db.flush()
-    user = Usuario(id_organizacion=1, id_rol=role.id_rol, nombres="Test", apellidos="Admin",
+    user = Usuario(id_organizacion=None if role_name == "ADMINISTRADOR_PLATAFORMA" else 1,
+                   id_rol=role.id_rol, nombres="Test", apellidos="Admin",
                    correo=email, password_hash="not-used", estado="ACTIVO")
     db.add(user)
     db.commit()
@@ -51,7 +52,7 @@ def test_platform_admin_can_read_and_update_plan_and_features_are_reflected(db):
         "caracteristicas": [
             {"codigo": "catalogo", "habilitada": False, "limite": 50,
              "configuracion": {"offline": True, "modo": "lectura"}},
-            {"codigo": "reportes_gemini", "habilitada": True},
+            {"codigo": "reportes_ia", "habilitada": True},
         ]
     })
     public_plans = client.get("/api/subscriptions/plans", headers=platform)
@@ -64,9 +65,9 @@ def test_platform_admin_can_read_and_update_plan_and_features_are_reflected(db):
     assert by_code["catalogo"]["habilitada"] is False
     assert by_code["catalogo"]["limite"] == 50
     assert by_code["catalogo"]["configuracion"] == {"offline": True, "modo": "lectura"}
-    assert by_code["reportes_gemini"]["habilitada"] is True
+    assert by_code["reportes_ia"]["habilitada"] is True
     assert public_plans.json()[0]["nombre"] == "Estilo Plus"
-    assert {feature["codigo"]: feature["habilitada"] for feature in public_plans.json()[0]["caracteristicas"]}["reportes_gemini"] is True
+    assert {feature["codigo"]: feature["habilitada"] for feature in public_plans.json()[0]["caracteristicas"]}["reportes_ia"] is True
 
 
 def test_company_admin_cannot_access_or_modify_global_plans(db):
@@ -110,5 +111,9 @@ def test_plan_feature_update_rejects_unknown_or_duplicate_codes(db):
     duplicate = client.put(f"/api/platform/plans/{plan.id_plan}/features", headers=platform,
                            json={"caracteristicas": [{"codigo": "catalogo", "habilitada": True},
                                                        {"codigo": "catalogo", "habilitada": False}]})
+    duplicate_alias = client.put(f"/api/platform/plans/{plan.id_plan}/features", headers=platform,
+                                 json={"caracteristicas": [{"codigo": "reportes_ia", "habilitada": True},
+                                                             {"codigo": "reportes_gemini", "habilitada": False}]})
     assert unknown.status_code == 404
     assert duplicate.status_code == 422
+    assert duplicate_alias.status_code == 422

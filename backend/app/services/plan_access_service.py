@@ -106,19 +106,22 @@ class PlanAccessService:
                 "plan": access.plan.codigo,
             })
 
-    def require_feature(self, feature_code: str) -> PlanAccess:
-        access = self.resolve()
+    def require_feature(self, feature_code: str, *, commit_expiration: bool = True) -> PlanAccess:
+        access = self.resolve(commit_expiration=commit_expiration)
         if not access.has_subscription_history:
             return access
         if access.subscription is None:
             self._raise_inactive_subscription(access.organization_id)
 
-        feature = self.db.scalar(
-            select(PlanCaracteristica).where(
-                PlanCaracteristica.plan_id == access.subscription.plan_id,
-                PlanCaracteristica.codigo == feature_code,
-            )
-        )
+        codes = ("reportes_ia", "reportes_gemini") if feature_code in {"reportes_ia", "reportes_gemini"} else (feature_code,)
+        rows = self.db.scalars(select(PlanCaracteristica).where(
+            PlanCaracteristica.plan_id == access.subscription.plan_id,
+            PlanCaracteristica.codigo.in_(codes),
+        )).all()
+        by_code = {row.codigo: row for row in rows}
+        # Prefer an explicitly configured canonical capability. Use the legacy
+        # code only while a plan has not yet received its canonical row.
+        feature = by_code.get("reportes_ia", by_code.get("reportes_gemini")) if len(codes) > 1 else by_code.get(feature_code)
         if feature is None or not feature.habilitada:
             raise HTTPException(403, detail={
                 "code": "PLAN_FEATURE_NOT_INCLUDED",

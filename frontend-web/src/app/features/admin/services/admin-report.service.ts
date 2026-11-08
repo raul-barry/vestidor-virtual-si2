@@ -7,6 +7,9 @@ import {
   DashboardReport,
   AiReportRequest,
   AiReportResponse,
+  BranchComparisonFilters,
+  BranchComparisonAccess,
+  BranchSalesComparison,
   InventoryReport,
   ProductRanking,
   ReportBranch,
@@ -51,6 +54,22 @@ export class AdminReportService {
     return this.api.get<ReportBranch[]>('/api/admin/reports/branches');
   }
 
+  getBranchComparisonAccess(): Observable<BranchComparisonAccess> {
+    return this.api.get<BranchComparisonAccess>('/api/admin/reports/comparison/access');
+  }
+
+  getComparisonBranches(): Observable<ReportBranch[]> {
+    return this.api.get<ReportBranch[]>('/api/admin/reports/comparison/branches');
+  }
+
+  getBranchSalesComparison(filters: BranchComparisonFilters): Observable<BranchSalesComparison> {
+    return this.api.get<BranchSalesComparison>(`/api/admin/reports/comparison${this.comparisonQuery(filters)}`);
+  }
+
+  exportBranchSalesComparison(filters: BranchComparisonFilters, format: 'pdf' | 'xlsx'): Observable<Blob> {
+    return this.api.getBlob(`/api/admin/reports/comparison/export/${format}${this.comparisonQuery(filters)}`);
+  }
+
   getFeatures(): Observable<ReportFeatures> {
     return this.api.get<ReportFeatures>('/api/admin/reports/features');
   }
@@ -93,5 +112,13 @@ export class AdminReportService {
     }
     const query = params.toString();
     return query ? `?${query}` : '';
+  }
+
+  private comparisonQuery(filters: BranchComparisonFilters): string {
+    const params = new URLSearchParams();
+    params.set('fecha_inicio', filters.fecha_inicio);
+    params.set('fecha_fin', filters.fecha_fin);
+    for (const branchId of filters.id_sucursal) params.append('id_sucursal', String(branchId));
+    return `?${params.toString()}`;
   }
 }
