@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import get_current_platform_admin
 from app.database.database import get_db
 from app.models.platform_ai_config import PlatformAIConfig, PlatformAIConfigAudit
@@ -20,6 +21,7 @@ from app.services.ai_provider_service import (
     AIProviderService,
     CAPABILITY_MODELS,
     DEFAULT_MODELS,
+    GENERATION_CAPABILITIES,
     encrypt_api_key,
     public_config,
 )
@@ -90,6 +92,11 @@ def save_config(
             "speech_transcription": request.transcription_model,
         },
     }
+    effective_model = settings.groq_model.strip() or "openai/gpt-oss-120b"
+    values["primary_model"] = effective_model
+    values["fast_model"] = effective_model
+    for capability in GENERATION_CAPABILITIES:
+        values["capability_models"][capability] = effective_model
     capability_models = values["capability_models"]
     if not isinstance(capability_models, dict) or set(capability_models) != set(CAPABILITY_MODELS):
         raise HTTPException(status_code=422, detail="La asignación debe incluir exactamente las ocho capacidades registradas.")

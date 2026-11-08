@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from '../../../../core/services/api.service';
 import { OutboxSyncService } from '../../../../core/services/outbox-sync.service';
 import { ExchangeManagementComponent } from './exchange-management.component';
@@ -65,5 +65,51 @@ describe('ExchangeManagementComponent', () => {
     expect(api.post).toHaveBeenCalledWith('/api/admin/exchanges/incidents/9/reconcile', {
       stock_real: 0, motivo: 'Conteo físico confirmado'
     });
+  });
+
+  it('searches a sale and displays tenant sale details from the API', async () => {
+    const sale = { codigo: 'PED-14', elegible: true, detalles: [{ id_detalle: 8, cantidad_disponible_para_cambio: 1 }] };
+    api.get.and.returnValue(of(sale));
+    component.saleCode = 'PED-14';
+    await component.findSale();
+    expect(api.get).toHaveBeenCalledWith('/api/admin/exchanges/sales/PED-14');
+    expect(component.sale).toEqual(sale);
+    expect(component.lookupError).toBe('');
+  });
+
+  it('registers the selected change once and keeps its receipt and refreshed sale', async () => {
+    const sale = { codigo: 'PED-14', elegible: true, detalles: [] };
+    const receipt = { id: 51, original_order_id: 14, state: 'COMPLETADO' };
+    api.post.and.returnValue(of(receipt));
+    api.get.and.callFake((path: string) => (path.includes('/sales/') ? of(sale) : of([])) as any);
+    component.sale = { elegible: true };
+    component.saleCode = 'PED-14';
+    component.replacement[8] = 21;
+    component.exchangeQuantity[8] = 1;
+    component.reason[8] = 'Cambio de talla';
+    const line = { id_detalle: 8, cantidad_disponible_para_cambio: 1 };
+
+    const first = component.registerChange(line);
+    await component.registerChange(line);
+    await first;
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith('/api/admin/exchanges/register', jasmine.objectContaining({
+      id_detalle: 8, id_variante_sustituta: 21, cantidad: 1, motivo: 'Cambio de talla'
+    }));
+    expect(component.receipt).toEqual(receipt);
+    expect(component.successMessage).toContain('registrado y guardado');
+  });
+
+  it('shows the server rejection without suggesting a successful change', async () => {
+    api.post.and.returnValue(throwError(() => ({ error: { detail: 'El plazo de 7 días venció.' } })));
+    component.sale = { elegible: true };
+    component.saleCode = 'PED-14';
+    component.replacement[8] = 21;
+    component.reason[8] = 'Cambio de talla';
+    await component.registerChange({ id_detalle: 8, cantidad_disponible_para_cambio: 1 });
+    expect(component.lookupError).toBe('El plazo de 7 días venció.');
+    expect(component.successMessage).toBe('');
+    expect(component.receipt).toBeNull();
   });
 });

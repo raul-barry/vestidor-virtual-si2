@@ -98,7 +98,8 @@ export class CatalogListComponent implements OnInit {
     this.catalogService.searchProducts(filters).subscribe({
       next: (products) => {
         this.products = products;
-        if (this.catalogService.online !== false) this.lastSync = Date.now();
+        this.online = !this.catalogService.servingOfflineData;
+        if (this.online) this.lastSync = Date.now();
         else this.catalogService.getCachedProducts?.().subscribe(snapshot => this.lastSync = snapshot.syncedAt);
         this.isLoading = false;
       },
@@ -126,6 +127,9 @@ export class CatalogListComponent implements OnInit {
       next: (products) => {
         this.products = products;
         this.setFilterOptions(products);
+        this.online = !this.catalogService.servingOfflineData;
+        if (this.online) this.lastSync = Date.now();
+        else this.catalogService.getCachedProducts().subscribe(snapshot => this.lastSync = snapshot.syncedAt);
         this.isLoading = false;
       },
       error: (error: { error?: { message?: string } }) => this.handleError(error)
@@ -140,6 +144,7 @@ export class CatalogListComponent implements OnInit {
 
   private handleError(error: { error?: { message?: string } }): void {
     this.isLoading = false;
+    this.online = false;
     this.catalogService.getCachedProducts?.().subscribe(snapshot => {
       this.products = snapshot.products;
       this.lastSync = snapshot.syncedAt;

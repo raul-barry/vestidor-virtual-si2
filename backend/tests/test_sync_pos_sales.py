@@ -40,6 +40,7 @@ def _op(user, inventory, *, operation_uuid=None, amount="999.00"):
 def test_offline_pos_cash_sale_is_idempotent_and_consumes_stock_once(db):
     client, cashier, inventory, headers = _setup(db)
     original_stock = inventory.stock_disponible
+    original_sold = inventory.stock_vendido
     operation = _op(cashier, inventory)
     first = client.post("/api/sync/batch", headers=headers, json={"operations": [operation]})
     replay = client.post("/api/sync/batch", headers=headers, json={"operations": [operation]})
@@ -53,6 +54,7 @@ def test_offline_pos_cash_sale_is_idempotent_and_consumes_stock_once(db):
     assert db.scalar(select(func.count()).select_from(PedidoDetalle)) == 1
     db.refresh(inventory)
     assert inventory.stock_disponible == original_stock - 1
+    assert inventory.stock_vendido == original_sold + 1
     assert db.scalar(select(func.count()).select_from(MovimientoInventario).where(
         MovimientoInventario.motivo.like("Venta presencial offline pedido %")
     )) == 1

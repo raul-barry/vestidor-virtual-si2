@@ -1,25 +1,74 @@
-const CACHE = 'fashion-store-shell-v1';
+const CACHE = 'fashion-store-shell-v2';
+
+async function cacheApplicationShell() {
+  const cache = await caches.open(CACHE);
+  const response = await fetch('/index.html', { cache: 'no-cache' });
+  if (!response.ok) throw new Error('FashionStore shell unavailable');
+  await cache.put('/index.html', response.clone());
+  await cache.put('/', response.clone());
+  const html = await response.text();
+  const queue = [];
+  for (const match of html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css))["']/g)) queue.push(new URL(match[1], self.location.origin).href);
+  queue.push(new URL('/manifest.webmanifest', self.location.origin).href);
+
+  const visited = new Set();
+  while (queue.length) {
+    const asset = queue.shift();
+    if (visited.has(asset) || new URL(asset).origin !== self.location.origin) continue;
+    visited.add(asset);
+    const assetResponse = await fetch(asset, { cache: 'no-cache' });
+    if (!assetResponse.ok) continue;
+    await cache.put(asset, assetResponse.clone());
+    if (!asset.endsWith('.js')) continue;
+    const source = await assetResponse.text();
+    for (const match of source.matchAll(/(?:import\(\s*|from\s*)["']([^"']+\.(?:js|css))["']/g)) {
+      queue.push(new URL(match[1], asset).href);
+    }
+  }
+}
+
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/','/index.html','/manifest.webmanifest'])));
+  event.waitUntil(cacheApplicationShell());
   self.skipWaiting();
 });
-self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    for (const key of await caches.keys()) {
+      if (key.startsWith('fashion-store-shell-') && key !== CACHE) await caches.delete(key);
+    }
+    await self.clients.claim();
+  })());
+});
+
 self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
-  if (event.request.method !== 'GET') return;
-  if (event.request.destination === 'image' && url.pathname.startsWith('/assets/catalog/')) {
-    event.respondWith(caches.match(event.request).then(cached => {
-      const update = fetch(event.request).then(response => {
-        if (response.ok || response.type === 'opaque') caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+
+  if (request.destination === 'image') {
+    event.respondWith(caches.open(CACHE).then(async cache => {
+      const cached = await cache.match(request);
+      const update = fetch(request).then(response => {
+        if (response.ok || response.type === 'opaque') void cache.put(request, response.clone());
         return response;
       });
-      return cached || update;
+      if (cached) {
+        void update.catch(() => undefined);
+        return cached;
+      }
+      return update;
     }));
     return;
   }
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-  event.respondWith(fetch(event.request).then(response => {
-    if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); }
+
+  event.respondWith(fetch(request).then(response => {
+    if (response.ok) void caches.open(CACHE).then(cache => cache.put(request, response.clone()));
     return response;
-  }).catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html'))));
+  }).catch(async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (request.mode === 'navigate') return (await caches.open(CACHE)).match('/index.html');
+    return new Response('', { status: 503, statusText: 'Offline resource unavailable' });
+  }));
 });

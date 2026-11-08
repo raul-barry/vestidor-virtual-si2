@@ -41,7 +41,10 @@ export class BranchListComponent implements OnInit {
     this.dialog.open(BranchDialogComponent, { data: branch ?? null, width: '30rem' }).afterClosed().subscribe((result) => {
       if (result) {
         const request = branch ? this.service.update(branch.id_sucursal, result) : this.service.create(result);
-        request.subscribe({ next: () => this.load(), error: () => this.snack.open("No se pudo guardar", "Cerrar", { duration: 5000 }) });
+        request.subscribe({
+          next: () => this.load(),
+          error: (error: unknown) => this.snack.open(this.saveErrorMessage(error, !branch), "Cerrar", { duration: 5000 })
+        });
       }
     });
   }
@@ -62,5 +65,18 @@ export class BranchListComponent implements OnInit {
   private updateLocal(branch: Branch): void {
     const index = this.dataSource.data.findIndex((item) => item.id_sucursal === branch.id_sucursal);
     if (index >= 0) { this.dataSource.data[index] = branch; } else { this.dataSource.data = [...this.dataSource.data, branch]; }
+  }
+
+  private saveErrorMessage(error: unknown, creating: boolean): string {
+    const detail = (error as { error?: { detail?: Record<string, unknown> } } | null)?.error?.detail;
+    if (
+      creating && detail?.['code'] === 'PLAN_LIMIT_REACHED' &&
+      detail['resource'] === 'sucursales_activas' &&
+      typeof detail['plan_nombre'] === 'string' &&
+      typeof detail['limit'] === 'number'
+    ) {
+      return `No se pudo crear la sucursal. Tu plan ${detail['plan_nombre']} permite un máximo de ${detail['limit']} sucursales y ya alcanzaste ese límite. Actualiza tu plan para agregar más sucursales.`;
+    }
+    return 'No se pudo guardar';
   }
 }

@@ -82,4 +82,21 @@ describe('AiReportPanelComponent', () => {
       id_sucursal: 7,
     }), 'pdf');
   });
+
+  it('keeps calculated metrics visible when AI analysis is unavailable', () => {
+    reports.generateAiReport.and.returnValue(of({
+      tipo: 'ventas',
+      periodo: { desde: '2026-11-01', hasta: '2026-11-05' },
+      metricas_calculadas: { ventas_pagadas: '450.00' },
+      observaciones_ia: [],
+      recomendaciones_ia: [],
+      error_ia: 'La integración de IA de plataforma no está configurada.',
+    }));
+    fixture.detectChanges();
+    fixture.componentInstance.generate();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('450.00');
+    expect(fixture.nativeElement.textContent).toContain('no se pudo completar el análisis de IA');
+  });
 });

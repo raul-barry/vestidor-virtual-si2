@@ -1,4 +1,4 @@
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from './api.service';
 import { TokenService } from './token.service';
 import { CatalogOfflineStore } from '../../features/catalog/services/catalog-offline.store';
@@ -10,12 +10,14 @@ describe('OutboxSyncService sales', () => {
   const store = new CatalogOfflineStore();
   let api: jasmine.SpyObj<ApiService>;
   let service: OutboxSyncService;
+  let reservations: jasmine.SpyObj<ReservationOfflineStore>;
 
   beforeEach(() => {
     const payload = btoa(JSON.stringify({ id_usuario: 4101, id_organizacion: 4102, exp: Math.floor(Date.now() / 1000) + 3600 }));
     localStorage.setItem(tokenKey, `header.${payload}.signature`);
     api = jasmine.createSpyObj<ApiService>('ApiService', ['post']);
-    service = new OutboxSyncService(store, api, new TokenService(), {} as ReservationOfflineStore);
+    reservations = jasmine.createSpyObj<ReservationOfflineStore>('ReservationOfflineStore', ['reconcile']);
+    service = new OutboxSyncService(store, api, new TokenService(), reservations);
   });
 
   afterEach(() => localStorage.removeItem(tokenKey));
@@ -80,5 +82,59 @@ describe('OutboxSyncService sales', () => {
     expect(stored.payload['metodo_pago']).toBeUndefined();
     expect(await service.cachedPosOptions()).toEqual({ clientes: [], inventario: [{ id_sucursal: 8, id_variante: 9 }] });
     expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('serializes reservation and POS outbox rows to the strict backend contract without local metadata', async () => {
+    spyOnProperty(navigator, 'onLine', 'get').and.returnValue(true);
+    for (const operationType of ['reserva.crear', 'pos.venta_contado']) {
+      const operation = await service.enqueue(operationType, operationType === 'reserva.crear'
+        ? { id_inventario: 31, cantidad: 1, id_usuario: 4101 }
+        : { id_sucursal: 8, importe_recibido: 25, lineas: [{ id_variante: 9, cantidad: 1 }] });
+      api.post.and.returnValue(of({ results: [{ operation_uuid: operation.operation_uuid, status: 'SINCRONIZADA', result: {} }] } as any));
+
+      await service.syncPending();
+
+      const request = api.post.calls.mostRecent().args[1] as { operations: Array<Record<string, unknown>> };
+      const sent = request.operations.find(row => row['operation_uuid'] === operation.operation_uuid)!;
+      expect(sent).toBeDefined();
+      expect(sent['owner_user_id']).toBeUndefined();
+      expect(Object.keys(sent).sort()).toEqual([
+        'client_id', 'created_at', 'operation_type', 'operation_uuid', 'payload', 'schema_version', 'tenant_scope'
+      ]);
+      expect((await store.listOutbox('org:4102', 4101)).find(row => row.operation_uuid === operation.operation_uuid)?.status).toBe('SINCRONIZADA');
+    }
+  });
+
+  it('preserves server validation details and does not resubmit rejected operations', async () => {
+    spyOnProperty(navigator, 'onLine', 'get').and.returnValue(true);
+    const operation = await service.enqueue('reserva.crear', { id_inventario: 'invalid', cantidad: 1, id_usuario: 4101 });
+    api.post.and.returnValue(throwError(() => ({ status: 422, error: { detail: [
+      { loc: ['body', 'operations', 0, 'owner_user_id'], msg: 'Extra inputs are not permitted' }
+    ] } })));
+
+    await service.syncPending();
+    const rejected = (await store.listOutbox('org:4102', 4101)).find(row => row.operation_uuid === operation.operation_uuid)!;
+    expect(rejected.status).toBe('RECHAZADA');
+    expect(rejected.error_category).toBe('DATOS_INVALIDOS');
+    expect(rejected.error_message).toBe('operations.0.owner_user_id: Extra inputs are not permitted');
+
+    await service.syncPending();
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps transport failures retryable and retries only when explicitly requested', async () => {
+    spyOnProperty(navigator, 'onLine', 'get').and.returnValue(false);
+    const operation = await service.enqueue('reserva.crear', { id_inventario: 31, cantidad: 1, id_usuario: 4101 });
+    api.post.and.returnValue(throwError(() => ({ status: 0, message: 'network unavailable' })));
+
+    // A real request failure is marked retryable; an offline client never sends it again automatically.
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    await service.syncPending();
+    const retryable = (await store.listOutbox('org:4102', 4101)).find(row => row.operation_uuid === operation.operation_uuid)!;
+    expect(retryable.status).toBe('ERROR_REINTENTABLE');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    expect(await service.retryOperation(operation.operation_uuid)).toBeTrue();
+    const pending = (await store.listOutbox('org:4102', 4101)).find(row => row.operation_uuid === operation.operation_uuid)!;
+    expect(pending.status).toBe('PENDIENTE');
   });
 });

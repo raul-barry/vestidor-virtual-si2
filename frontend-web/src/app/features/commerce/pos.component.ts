@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { OutboxSyncService } from '../../core/services/outbox-sync.service';
+import { loyaltyErrorMessage } from '../loyalty/loyalty-error-message';
 
 @Component({
   standalone: true,
@@ -105,7 +106,7 @@ export class PosComponent implements OnInit, OnDestroy {
   get total(): number { return Math.max(0, this.subtotal - this.loyaltyDiscount); }
   clearCustomer(): void { this.customerId = 0; this.pointsToRedeem=0;this.loyaltyDiscount=0;this.loyaltyBalance=0; }
   refreshLoyalty(): void {this.pointsToRedeem=0;this.loyaltyDiscount=0;this.loyaltyBalance=0;this.loyaltyError='';if(this.customerId)this.api.get<any>(`/api/loyalty/pos/customer/${this.customerId}`).subscribe({next:r=>this.loyaltyBalance=r.balance,error:()=>this.loyaltyEnabled=false});}
-  estimateLoyalty(): void {this.loyaltyDiscount=0;this.loyaltyError='';if(!this.customerId||!this.pointsToRedeem||!this.subtotal)return;this.api.post<any>('/api/loyalty/pos/estimate',{customer_id:this.customerId,amount:this.subtotal,points:Number(this.pointsToRedeem)}).subscribe({next:r=>{this.pointsToRedeem=Number(r.points);this.loyaltyDiscount=Number(r.discount);this.loyaltyBalance=Number(r.balance);},error:e=>{this.loyaltyError=e.error?.detail??'No se pudo estimar el canje.';}});}
+  estimateLoyalty(): void {this.loyaltyDiscount=0;this.loyaltyError='';if(!this.customerId||!this.pointsToRedeem||!this.subtotal)return;this.api.post<any>('/api/loyalty/pos/estimate',{customer_id:this.customerId,amount:this.subtotal,points:Number(this.pointsToRedeem)}).subscribe({next:r=>{this.pointsToRedeem=Number(r.points);this.loyaltyDiscount=Number(r.discount);this.loyaltyBalance=Number(r.balance);},error:e=>{this.loyaltyError=loyaltyErrorMessage(e, 'No se pudo estimar el canje de puntos.');}});}
   clearLines(): void { this.lines = []; this.inventoryId = 0; this.estimateLoyalty(); }
   clearInvoice(): void { if (!this.invoice) { this.nitCi = ''; this.businessName = ''; } }
 
@@ -166,7 +167,7 @@ export class PosComponent implements OnInit, OnDestroy {
       id_sucursal_entrega: this.branchId, items: this.lines.map(item => ({ id_inventario: item.id_inventario, cantidad: item.cantidad }))
     }).subscribe({
       next: response => { this.busy = false; this.lines = []; this.message = `Venta #${response.id_pedido} registrada correctamente.`; void this.loadOptions(); },
-      error: error => { this.busy = false; this.message = error.error?.detail || 'No fue posible registrar la venta'; }
+      error: error => { this.busy = false; this.message = loyaltyErrorMessage(error, 'No fue posible registrar la venta ni aplicar los puntos asociados.'); }
     });
   }
 }

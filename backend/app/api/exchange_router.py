@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ from app.models.usuario import Usuario
 from app.services.exchange_service import (
     _branch, _purchase_context, _set_economic_state, _variant, business_days_open,
     create_customer_request, deliver_replacement, exchange_record, inspect_exchange, resolve_incident,
+    register_staff_exchange, staff_sale_record,
 )
 from app.services.pricing_service import current_price
 
@@ -46,6 +47,14 @@ class InspectionRequest(BaseModel):
 class ReplacementRequest(BaseModel):
     id_variante_sustituta: int = Field(gt=0)
     id_sucursal_sustituta: int = Field(gt=0)
+
+
+class StaffExchangeRequest(BaseModel):
+    operation_uuid: UUID
+    id_detalle: int = Field(gt=0)
+    id_variante_sustituta: int = Field(gt=0)
+    cantidad: int = Field(gt=0, le=1000)
+    motivo: str = Field(min_length=3, max_length=255)
 
 
 class HolidayRequest(BaseModel):
@@ -154,9 +163,40 @@ def customer_exchanges(db: Session = Depends(get_db), user: Usuario = Depends(re
 
 
 @exchange_router.get("/admin/exchanges")
-def staff_exchanges(db: Session = Depends(get_db), _: Usuario = Depends(get_current_staff)):
-    rows = db.scalars(select(GarmentExchange).order_by(GarmentExchange.requested_at.desc()).limit(500)).all()
+def staff_exchanges(db: Session = Depends(get_db),
+                    user: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO_SUCURSAL", "CAJERO"))):
+    query = select(GarmentExchange)
+    if user.rol.nombre == "CAJERO":
+        query = query.where(GarmentExchange.branch_id == user.id_sucursal)
+    rows = db.scalars(query.order_by(GarmentExchange.requested_at.desc()).limit(500)).all()
     return [exchange_record(db, row) for row in rows]
+
+
+@exchange_router.get("/admin/exchanges/sales/{sale_code}")
+def staff_sale_lookup(sale_code: str, db: Session = Depends(get_db),
+                      user: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO_SUCURSAL", "CAJERO"))):
+    normalized = sale_code.strip().upper()
+    if normalized.startswith("PED-"):
+        normalized = normalized[4:]
+    elif normalized.startswith("#"):
+        normalized = normalized[1:]
+    if not normalized.isdecimal() or int(normalized) < 1:
+        raise HTTPException(422, "Ingresa el código de venta, por ejemplo PED-123")
+    return staff_sale_record(db, sale_id=int(normalized), staff=user)
+
+
+@exchange_router.post("/admin/exchanges/register", status_code=201)
+def register_staff_change(data: StaffExchangeRequest, db: Session = Depends(get_db),
+                          user: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO_SUCURSAL", "CAJERO"))):
+    try:
+        row = register_staff_exchange(db, staff=user, detail_id=data.id_detalle,
+            replacement_variant_id=data.id_variante_sustituta, quantity=data.cantidad,
+            reason=data.motivo, operation_uuid=data.operation_uuid)
+        _commit(db)
+    except Exception:
+        db.rollback()
+        raise
+    return exchange_record(db, row)
 
 
 @exchange_router.get("/admin/exchanges/{exchange_id}/options")
@@ -237,8 +277,12 @@ def deliver(exchange_id: int, db: Session = Depends(get_db), user: Usuario = Dep
 
 
 @exchange_router.get("/admin/exchanges/incidents")
-def incidents(db: Session = Depends(get_db), _: Usuario = Depends(get_current_staff)):
-    rows = db.scalars(select(ExchangeInventoryIncident).order_by(ExchangeInventoryIncident.created_at.desc())).all()
+def incidents(db: Session = Depends(get_db),
+              user: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO_SUCURSAL", "CAJERO"))):
+    query = select(ExchangeInventoryIncident)
+    if user.rol.nombre == "CAJERO":
+        query = query.where(ExchangeInventoryIncident.branch_id == user.id_sucursal)
+    rows = db.scalars(query.order_by(ExchangeInventoryIncident.created_at.desc())).all()
     return [{"id": row.id, "exchange_id": row.exchange_id, "branch_id": row.branch_id,
              "employee_id": row.employee_id, "variant_id": row.variant_id,
              "inventory_id": row.inventory_id, "direction": row.direction,

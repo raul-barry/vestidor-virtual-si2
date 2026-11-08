@@ -16,7 +16,7 @@ export function navigationGroups(role: string): NavigationGroup[] {
     case 'ADMINISTRADOR': return ADMIN_GROUPS;
     case 'ENCARGADO':
     case 'ENCARGADO_SUCURSAL': return [{ label: 'Operaciones', links: [link('Inventario', '/inventory'), link('Reservas', '/reservations'), link('Cambios de prendas', '/admin/exchanges')] }];
-    case 'CAJERO': return [{ label: 'Ventas', links: [link('Venta presencial', '/pos')] }];
+    case 'CAJERO': return [{ label: 'Ventas', links: [link('Venta presencial', '/pos'), link('Cambios de prendas', '/admin/exchanges')] }];
     case 'ADMINISTRADOR_PLATAFORMA': return [{ label: 'Administración SaaS', links: [link('Empresas', '/platform/organizations'), link('Suscripciones', '/platform/subscriptions'), link('Planes comerciales', '/platform/plans'), link('Roles y permisos', '/platform/roles'), link('Inteligencia artificial', '/platform/ai'), link('Seguridad', '/platform/security')] }];
     default: return [];
   }

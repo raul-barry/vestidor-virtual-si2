@@ -109,6 +109,7 @@ def create_offline_pos_sale(db: Session, actor: SyncActor, payload: dict[str, An
     for inventory, quantity, price in rows:
         previous = inventory.stock_disponible
         inventory.stock_disponible -= quantity
+        inventory.stock_vendido += quantity
         db.add(PedidoDetalle(
             id_pedido=order.id_pedido, id_variante=inventory.id_variante,
             cantidad=quantity, precio_unitario=price,

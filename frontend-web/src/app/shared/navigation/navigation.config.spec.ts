@@ -14,9 +14,10 @@ describe('Role navigation', () => {
       expect(homeForRole(role)).toBe('/inventory');
     });
   }
-  it('shows only sales for cashiers', () => {
-    expect(navigationGroups('CAJERO').flatMap(x => x.links.map(y => y.path))).toEqual(['/pos']);
+  it('allows cashiers to access POS and their branch garment exchanges', () => {
+    expect(navigationGroups('CAJERO').flatMap(x => x.links.map(y => y.path))).toEqual(['/pos', '/admin/exchanges']);
     expect(homeForRole('CAJERO')).toBe('/pos');
+    expect(routes.find(x => x.path === 'admin/exchanges')?.data?.['roles']).toContain('CAJERO');
   });
   it('groups administration into five categories', () => {
     expect(navigationGroups('ADMINISTRADOR').map(x => x.label)).toEqual(['Catálogo', 'Inventario', 'Ventas', 'Usuarios', 'Reportes']);

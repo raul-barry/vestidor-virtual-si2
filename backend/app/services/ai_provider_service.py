@@ -15,9 +15,14 @@ from app.core.config import settings
 from app.models.platform_ai_config import PlatformAIConfig
 
 
+PRIMARY_GROQ_MODEL = settings.groq_model.strip() or "openai/gpt-oss-120b"
+GENERATION_CAPABILITIES = {
+    "general_chat", "complex_reasoning", "business_reports", "sales_analysis",
+    "recommendations", "uml_assistant",
+}
 DEFAULT_MODELS = {
-    "primary_model": "openai/gpt-oss-120b",
-    "fast_model": "openai/gpt-oss-20b",
+    "primary_model": PRIMARY_GROQ_MODEL,
+    "fast_model": PRIMARY_GROQ_MODEL,
     "vision_model": "qwen/qwen3.8-27b",
     "transcription_model": "whisper-large-v3-turbo",
 }
@@ -79,21 +84,28 @@ class AIProviderService:
         if override and override.strip():
             return override.strip()
         config = self._config()
+        config_error: Exception | None = None
         if config and config.encrypted_api_key:
             try:
-                return _cipher().decrypt(config.encrypted_api_key.encode("ascii")).decode("utf-8")
-            except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
-                raise AIProviderError("No se pudo leer la configuración cifrada de IA.") from exc
+                database_key = _cipher().decrypt(config.encrypted_api_key.encode("ascii")).decode("utf-8").strip()
+                if database_key:
+                    return database_key
+            except (AIProviderError, InvalidToken, UnicodeDecodeError, ValueError) as exc:
+                config_error = exc
         env_key = settings.groq_api_key.get_secret_value().strip()
         if env_key:
             return env_key
-        raise AIProviderError("La integración de IA de plataforma no está configurada.")
+        if config_error:
+            raise AIProviderError("La configuracion cifrada de plataforma no se puede leer y GROQ_API_KEY no esta disponible.") from config_error
+        raise AIProviderError("La integracion de IA de plataforma no esta configurada.")
 
     def _models(self) -> dict[str, str]:
         config = self._config()
         models = dict(DEFAULT_MODELS)
         if config and isinstance(config.models, dict):
             models.update({k: v for k, v in config.models.items() if k in DEFAULT_MODELS and isinstance(v, str)})
+        models["primary_model"] = settings.groq_model.strip() or "openai/gpt-oss-120b"
+        models["fast_model"] = models["primary_model"]
         return models
 
     def _capability_models(self) -> dict[str, str]:
@@ -114,6 +126,9 @@ class AIProviderService:
             if isinstance(selected, dict):
                 models.update({key: value for key, value in selected.items()
                                if key in CAPABILITY_MODELS and isinstance(value, str) and value})
+        effective_model = settings.groq_model.strip() or "openai/gpt-oss-120b"
+        for capability in GENERATION_CAPABILITIES:
+            models[capability] = effective_model
         return models
 
     def list_models(self, api_key: str | None = None) -> list[dict[str, Any]]:
@@ -149,8 +164,10 @@ class AIProviderService:
         return capabilities
 
     def validate_models(self, api_key: str, selected: dict[str, str], capability_models: dict[str, str] | None = None) -> None:
-        models = {item["id"]: item for item in self.list_models(api_key) if item["active"]}
-        assignments = {key: selected[value] for key, value in {
+        available = {item["id"]: item for item in self.list_models(api_key) if item["active"]}
+        effective_model = settings.groq_model.strip() or "openai/gpt-oss-120b"
+        effective_selected = {**selected, "primary_model": effective_model, "fast_model": effective_model}
+        assignments = {key: effective_selected[field] for key, field in {
             "general_chat": "fast_model", "complex_reasoning": "primary_model",
             "business_reports": "primary_model", "sales_analysis": "primary_model",
             "recommendations": "primary_model", "uml_assistant": "primary_model",
@@ -158,18 +175,23 @@ class AIProviderService:
         }.items()}
         if capability_models is not None:
             assignments.update(capability_models)
-        all_selected = {**{key: value for key, value in selected.items() if isinstance(value, str)}, **assignments}
-        missing = sorted({model for model in all_selected.values() if model not in models})
+        for capability in GENERATION_CAPABILITIES:
+            assignments[capability] = effective_model
+        all_selected = {
+            **{key: value for key, value in effective_selected.items() if isinstance(value, str)},
+            **assignments,
+        }
+        missing = sorted({model for model in all_selected.values() if model not in available})
         if missing:
-            raise AIProviderError("Los siguientes modelos no están disponibles en Groq: " + ", ".join(missing))
-        for field, capability in (("primary_model", "text"), ("fast_model", "text"),
-                                  ("vision_model", "vision"), ("transcription_model", "transcription")):
-            if capability not in models[selected[field]]["capabilities"]:
-                raise AIProviderError(f"El modelo seleccionado para {field} no admite la capacidad {capability}.")
+            raise AIProviderError("Los siguientes modelos no estan disponibles en Groq: " + ", ".join(missing))
+        for field, expected in (("primary_model", "text"), ("fast_model", "text"),
+                                ("vision_model", "vision"), ("transcription_model", "transcription")):
+            if expected not in available[effective_selected[field]]["capabilities"]:
+                raise AIProviderError(f"El modelo seleccionado para {field} no admite la capacidad {expected}.")
         for capability, model_id in assignments.items():
             expected = "vision" if capability == "image_understanding" else (
                 "transcription" if capability == "speech_transcription" else "text")
-            if expected not in models[model_id]["capabilities"]:
+            if expected not in available[model_id]["capabilities"]:
                 raise AIProviderError(f"El modelo seleccionado para {capability} no admite la capacidad {expected}.")
 
     def test_connection(self, api_key: str | None = None, model: str | None = None,
@@ -177,7 +199,9 @@ class AIProviderService:
         key = self._api_key(api_key)
         if capability not in CAPABILITY_MODELS:
             raise AIProviderError("La capacidad solicitada no está registrada.")
-        model_id = model or self._capability_models()[capability]
+        model_id = self._capability_models()[capability] if capability in GENERATION_CAPABILITIES else (
+            model or self._capability_models()[capability]
+        )
         listed = {item["id"]: item for item in self.list_models(key) if item["active"]}
         if model_id not in listed:
             raise AIProviderError("El modelo seleccionado no está disponible en Groq.")
@@ -312,8 +336,10 @@ def public_config(config: PlatformAIConfig | None) -> dict[str, Any]:
     models = dict(DEFAULT_MODELS)
     if config and isinstance(config.models, dict):
         models.update({k: v for k, v in config.models.items() if k in DEFAULT_MODELS})
+    models["primary_model"] = settings.groq_model.strip() or "openai/gpt-oss-120b"
+    models["fast_model"] = models["primary_model"]
     capability_models = {
-        "general_chat": models["fast_model"], "complex_reasoning": models["primary_model"],
+        "general_chat": models["primary_model"], "complex_reasoning": models["primary_model"],
         "business_reports": models["primary_model"], "sales_analysis": models["primary_model"],
         "recommendations": models["primary_model"], "uml_assistant": models["primary_model"],
         "image_understanding": models["vision_model"], "speech_transcription": models["transcription_model"],
@@ -321,17 +347,23 @@ def public_config(config: PlatformAIConfig | None) -> dict[str, Any]:
     if config and isinstance(config.models, dict) and isinstance(config.models.get("capability_models"), dict):
         capability_models.update({k: v for k, v in config.models["capability_models"].items()
                                   if k in CAPABILITY_MODELS and isinstance(v, str)})
+    for capability in GENERATION_CAPABILITIES:
+        capability_models[capability] = models["primary_model"]
     encrypted = config.encrypted_api_key if config else None
-    masked = None
+    configured_database_key = False
     if encrypted:
         try:
-            key = _cipher().decrypt(encrypted.encode("ascii")).decode("utf-8")
-            masked = f"••••••••{key[-4:]}" if len(key) >= 4 else "••••••••"
+            configured_database_key = bool(_cipher().decrypt(encrypted.encode("ascii")).decode("utf-8").strip())
         except (AIProviderError, InvalidToken, ValueError, UnicodeDecodeError):
-            masked = "Configurada"
+            configured_database_key = False
+    env_key_present = bool(settings.groq_api_key.get_secret_value().strip())
+    configured = configured_database_key or env_key_present
+    masked = "Configurada en plataforma" if configured_database_key else (
+        "Configurada por entorno" if env_key_present else None
+    )
     return {
-        "configured": bool(encrypted) or bool(settings.groq_api_key.get_secret_value().strip()),
-        "masked_api_key": masked or ("Configurada por entorno" if settings.groq_api_key.get_secret_value().strip() else None),
+        "configured": configured,
+        "masked_api_key": masked,
         **models, "capability_models": capability_models,
         "experimental_models": sorted(EXPERIMENTAL_MODELS),
         "last_test_status": config.last_test_status if config else None,

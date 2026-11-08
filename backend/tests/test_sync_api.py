@@ -157,3 +157,17 @@ def test_sync_rejects_invalid_uuid_before_processing_batch(db):
 
     assert response.status_code == 422
     assert db.scalar(select(func.count()).select_from(SyncIdempotency)) == 0
+
+
+def test_sync_rejects_client_only_owner_metadata_from_wire_payload(db):
+    headers = _auth(db, "sync-extra-local-field@example.test")
+    operation = _operation(operation_type="reserva.crear", payload={
+        "id_inventario": 7, "cantidad": 1, "id_usuario": 1,
+    })
+    operation["owner_user_id"] = 1
+
+    response = TestClient(app).post("/api/sync/batch", headers=headers, json={"operations": [operation]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "owner_user_id"
+    assert db.scalar(select(func.count()).select_from(SyncIdempotency)) == 0

@@ -22,7 +22,8 @@ describe('ProductDetailComponent', () => {
     catalogService = jasmine.createSpyObj<CatalogService>('CatalogService', [
       'getProductVariants',
       'getProductAvailability',
-      'getProducts'
+      'getProducts',
+      'getCachedProducts'
     ]);
     Object.defineProperty(catalogService, 'canLoadCatalog', { get: () => true });
     cartService = jasmine.createSpyObj<CartService>('CartService', ['addItem']);
@@ -72,6 +73,7 @@ describe('ProductDetailComponent', () => {
   });
 
   it('shows an error when a detail request fails', () => {
+    catalogService.getCachedProducts.and.returnValue(of({ products: [], syncedAt: null }));
     catalogService.getProductVariants.and.returnValue(throwError(() => new Error('Network error')));
     catalogService.getProductAvailability.and.returnValue(of({
       id_producto: 1,
@@ -84,8 +86,29 @@ describe('ProductDetailComponent', () => {
 
     fixture.detectChanges();
 
-    expect(snackBar.open).toHaveBeenCalledWith('No fue posible cargar el detalle del producto', 'Cerrar', {
+    expect(snackBar.open).toHaveBeenCalledWith('Este detalle no está disponible sin conexión porque no se descargó previamente.', 'Cerrar', {
       duration: 5000
     });
+  });
+
+  it('loads product details from the tenant-scoped catalog cache after an online request fails', () => {
+    catalogService.getCachedProducts.and.returnValue(of({ products: [{
+      id_producto: 1, nombre: 'Camisa Oxford', descripcion: 'Algodón', precio_base: '189.90', estado: 'ACTIVO',
+      categoria: { id_categoria: 1, nombre: 'Camisas' },
+      variantes: [{ id_variante: 3, sku: 'OXF-M', talla: 'M', color: 'Azul' }]
+    }], syncedAt: Date.now() }));
+    catalogService.getProductVariants.and.returnValue(throwError(() => new Error('Network error')));
+    catalogService.getProductAvailability.and.returnValue(throwError(() => new Error('Network error')));
+    catalogService.getProducts.and.returnValue(of([]));
+    fixture = TestBed.createComponent(ProductDetailComponent);
+    component = fixture.componentInstance;
+
+    fixture.detectChanges();
+
+    expect(component.offline).toBeTrue();
+    expect(component.variants?.nombre_producto).toBe('Camisa Oxford');
+    expect(component.variants?.variantes[0].id_variante).toBe(3);
+    expect(component.availability?.disponibilidad).toEqual([]);
+    expect(snackBar.open).not.toHaveBeenCalled();
   });
 });

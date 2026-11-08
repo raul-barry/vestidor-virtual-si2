@@ -19,6 +19,7 @@ export interface ProductSearchFilters {
 
 @Injectable({ providedIn: 'root' })
 export class CatalogService {
+  private usingOfflineSnapshot = false;
   constructor(
     private readonly api: ApiService,
     private readonly context: PublicOrganizationContextService,
@@ -26,6 +27,7 @@ export class CatalogService {
   ) {}
 
   get online(): boolean { return typeof navigator === 'undefined' || navigator.onLine; }
+  get servingOfflineData(): boolean { return !this.online || this.usingOfflineSnapshot; }
   get cacheKey(): string | null {
     if (!this.context.isAuthenticated) return this.context.publicSlug ? `slug:${this.context.publicSlug}` : null;
     return this.context.organizationId ? `org:${this.context.organizationId}` : null;
@@ -55,21 +57,34 @@ export class CatalogService {
 
   getProducts(): Observable<Producto[]> {
     const key = this.cacheKey;
-    if (!this.online) return this.getCachedProducts().pipe(switchMap(value => of(value.products)));
+    if (!this.online) return this.getCachedProducts().pipe(tap(() => this.usingOfflineSnapshot = true), switchMap(value => of(value.products)));
     return this.api.get<Producto[]>(`/api/catalog/products?${this.query()}`).pipe(tap(products => {
+      this.usingOfflineSnapshot = false;
       if (key) void this.offline.put({ key, products, syncedAt: Date.now() });
-    }), catchError(error => this.getCachedProducts().pipe(switchMap(value => value.products.length ? of(value.products) : (() => { throw error; })()))));
+    }), catchError(error => this.getCachedProducts().pipe(switchMap(value => {
+      if (!value.products.length) throw error;
+      this.usingOfflineSnapshot = true;
+      return of(value.products);
+    }))));
   }
 
   searchProducts(filters: ProductSearchFilters): Observable<Producto[]> {
-    if (!this.online) return this.getCachedProducts().pipe(switchMap(({ products }) => of(products.filter(product =>
+    const filterCached = (products: Producto[]) => products.filter(product =>
       (!filters.nombre || product.nombre.toLocaleLowerCase().includes(filters.nombre.toLocaleLowerCase())) &&
       (!filters.categoria || product.categoria.nombre === filters.categoria) &&
       (!filters.talla || product.variantes.some(variant => variant.talla === filters.talla)) &&
       (!filters.color || product.variantes.some(variant => variant.color === filters.color)) &&
       (!filters.precio_max || Number(product.precio_base) <= filters.precio_max)
-    ))));
-    return this.api.get<Producto[]>(`/api/catalog/products/search?${this.query(filters)}`);
+    );
+    if (!this.online) return this.getCachedProducts().pipe(tap(() => this.usingOfflineSnapshot = true), switchMap(({ products }) => of(filterCached(products))));
+    return this.api.get<Producto[]>(`/api/catalog/products/search?${this.query(filters)}`).pipe(
+      tap(() => this.usingOfflineSnapshot = false),
+      catchError(error => this.getCachedProducts().pipe(switchMap(({ products }) => {
+        if (!products.length) throw error;
+        this.usingOfflineSnapshot = true;
+        return of(filterCached(products));
+      })))
+    );
   }
 
   getProductVariants(idProducto: number): Observable<ProductVariantsResponse> {

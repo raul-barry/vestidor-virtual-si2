@@ -72,6 +72,7 @@ export class TenantSubscriptionComponent implements OnInit {
   }
 
   featureLabel(code: string, name: string): string {
+    if (code === 'fidelizacion_clientes') return 'Fidelización de clientes';
     return code === 'reportes_ia' || code === 'reportes_gemini' ? 'Reportes con IA' : name;
   }
 

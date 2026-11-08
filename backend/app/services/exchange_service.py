@@ -1,6 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -17,6 +17,7 @@ from app.models.pedido_detalle import PedidoDetalle
 from app.models.producto import Producto
 from app.models.producto_variante import ProductoVariante
 from app.models.sucursal import Sucursal
+from app.models.reserva import Reserva
 from app.models.usuario import Usuario
 from app.services.audit_service import AuditService
 from app.services.pricing_service import current_price
@@ -381,6 +382,244 @@ def resolve_incident(db: Session, incident: ExchangeInventoryIncident, *, actor:
         entity="CambioInventarioIncidente", entity_id=incident.id,
         dedupe_key=f"exchange-incident:{incident.id}:resolved")
     return incident
+
+
+def _staff_exchange_branch(db: Session, order: Pedido, detail: PedidoDetalle,
+                           staff: Usuario) -> Sucursal | None:
+    """Resolve the branch where the sold line was fulfilled, without guessing across tenants."""
+    if detail.id_reserva is not None:
+        reservation = db.get(Reserva, detail.id_reserva)
+        if reservation is not None:
+            inventory = db.get(Inventario, reservation.id_inventario)
+            if inventory is not None:
+                return db.scalar(select(Sucursal).where(
+                    Sucursal.id_sucursal == inventory.id_sucursal,
+                    Sucursal.id_organizacion == staff.id_organizacion,
+                ))
+    if order.id_sucursal_entrega is not None:
+        branch = db.scalar(select(Sucursal).where(
+            Sucursal.id_sucursal == order.id_sucursal_entrega,
+            Sucursal.id_organizacion == staff.id_organizacion,
+        ))
+        if branch is not None:
+            return branch
+    # POS records its branch on Pedido. Older online records may only retain the
+    # inventory movement, so use an exact sale reference if available.
+    variants = select(Inventario.id_inventario).where(
+        Inventario.id_variante == detail.id_variante,
+    )
+    movement = db.scalar(select(MovimientoInventario).where(
+        MovimientoInventario.id_inventario.in_(variants),
+        MovimientoInventario.motivo.in_((
+            f"Pedido {order.id_pedido}",
+            f"Venta presencial pedido {order.id_pedido}",
+            f"Venta presencial offline pedido {order.id_pedido}",
+        )),
+    ).order_by(MovimientoInventario.id_movimiento).limit(1))
+    if movement is not None:
+        inventory = db.get(Inventario, movement.id_inventario)
+        if inventory is not None:
+            return db.scalar(select(Sucursal).where(
+                Sucursal.id_sucursal == inventory.id_sucursal,
+                Sucursal.id_organizacion == staff.id_organizacion,
+            ))
+    if staff.rol.nombre in {"ENCARGADO_SUCURSAL", "CAJERO"} and staff.id_sucursal is not None:
+        return db.scalar(select(Sucursal).where(
+            Sucursal.id_sucursal == staff.id_sucursal,
+            Sucursal.id_organizacion == staff.id_organizacion,
+            Sucursal.estado == "ACTIVA",
+        ))
+    return None
+
+
+def staff_sale_record(db: Session, *, sale_id: int, staff: Usuario) -> dict:
+    """Return tenant-scoped sale data and same-category replacement options."""
+    order = db.scalar(select(Pedido).where(Pedido.id_pedido == sale_id))
+    if order is None:
+        raise HTTPException(404, "No se encontró una venta con ese código")
+    payment = db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido))
+    confirmed_at = (payment.fecha_pago if payment and payment.estado == "PAGADO" else order.fecha_pedido)
+    if confirmed_at.tzinfo is None:
+        confirmed_at = confirmed_at.replace(tzinfo=timezone.utc)
+    age_days = (_now().date() - confirmed_at.date()).days
+    state_valid = order.estado in {"CONFIRMADO", "CONFIRMADA", "ENTREGADO"}
+    payment_valid = payment is not None and payment.estado == "PAGADO"
+    period_valid = 0 <= age_days <= 7
+    reason = None
+    if not state_valid:
+        reason = "La venta todavía no está confirmada."
+    elif not payment_valid:
+        reason = "La venta no tiene un pago confirmado."
+    elif age_days > 7:
+        reason = f"El plazo de 7 días venció. La venta se confirmó el {confirmed_at.date().isoformat()}."
+    elif age_days < 0:
+        reason = "La fecha de confirmación de la venta no es válida."
+
+    details = db.scalars(select(PedidoDetalle).where(
+        PedidoDetalle.id_pedido == order.id_pedido,
+    ).order_by(PedidoDetalle.id_detalle)).all()
+    lines = []
+    for detail in details:
+        original = db.get(ProductoVariante, detail.id_variante)
+        if original is None or original.producto.id_organizacion != staff.id_organizacion:
+            continue
+        branch = _staff_exchange_branch(db, order, detail, staff)
+        if branch is None or (staff.rol.nombre in {"ENCARGADO_SUCURSAL", "CAJERO"}
+                              and branch.id_sucursal != staff.id_sucursal):
+            continue
+        used = db.scalar(select(func.coalesce(func.sum(GarmentExchange.quantity), 0)).where(
+            GarmentExchange.original_detail_id == detail.id_detalle,
+            GarmentExchange.state != "RECHAZADO",
+        )) or 0
+        remaining = max(0, detail.cantidad - used)
+        variants = db.scalars(select(ProductoVariante).join(Producto).where(
+            Producto.id_organizacion == staff.id_organizacion,
+            Producto.id_categoria == original.producto.id_categoria,
+            Producto.estado == "ACTIVO", ProductoVariante.estado == "ACTIVO",
+            ProductoVariante.id_variante != original.id_variante,
+        ).order_by(Producto.nombre, ProductoVariante.id_variante)).all()
+        options = []
+        for variant in variants:
+            available = db.scalar(select(Inventario.stock_disponible).where(
+                Inventario.id_sucursal == branch.id_sucursal,
+                Inventario.id_variante == variant.id_variante,
+            )) or 0
+            options.append({
+                "id_variante": variant.id_variante,
+                "producto": variant.producto.nombre,
+                "talla": variant.talla.nombre,
+                "color": variant.color.nombre,
+                "stock_disponible": available,
+            })
+        lines.append({
+            "id_detalle": detail.id_detalle,
+            "id_variante": original.id_variante,
+            "producto": original.producto.nombre,
+            "talla": original.talla.nombre,
+            "color": original.color.nombre,
+            "cantidad_comprada": detail.cantidad,
+            "cantidad_disponible_para_cambio": remaining,
+            "sucursal": branch.nombre,
+            "id_sucursal": branch.id_sucursal,
+            "variantes_sustitutas": options,
+        })
+    return {
+        "id_pedido": order.id_pedido,
+        "codigo": f"PED-{order.id_pedido}",
+        "fecha_confirmacion": confirmed_at.isoformat(),
+        "estado": order.estado,
+        "estado_pago": payment.estado if payment else "SIN_PAGO",
+        "elegible": state_valid and payment_valid and period_valid,
+        "motivo_no_elegible": reason,
+        "detalles": lines,
+    }
+
+
+def register_staff_exchange(db: Session, *, staff: Usuario, detail_id: int,
+                            replacement_variant_id: int, quantity: int, reason: str,
+                            operation_uuid: UUID) -> GarmentExchange:
+    """Register a same-value, in-branch exchange with one atomic stock transaction."""
+    operation_id = str(operation_uuid)
+    previous = db.scalar(select(GarmentExchange).where(
+        GarmentExchange.organization_id == staff.id_organizacion,
+        GarmentExchange.operation_uuid == operation_id,
+    ))
+    if previous is not None:
+        if (previous.original_detail_id != detail_id
+                or previous.replacement_variant_id != replacement_variant_id
+                or previous.quantity != quantity or previous.reason != reason.strip()):
+            raise HTTPException(409, "El identificador de operación ya se usó con otros datos")
+        return previous
+
+    detail = db.scalar(select(PedidoDetalle).where(
+        PedidoDetalle.id_detalle == detail_id,
+    ).with_for_update())
+    if detail is None:
+        raise HTTPException(404, "Detalle de venta no encontrado")
+    order = db.scalar(select(Pedido).where(
+        Pedido.id_pedido == detail.id_pedido,
+    ).with_for_update())
+    if order is None:
+        raise HTTPException(404, "No se encontró una venta con ese código")
+    sale = staff_sale_record(db, sale_id=order.id_pedido, staff=staff)
+    if not sale["elegible"]:
+        raise HTTPException(422, sale["motivo_no_elegible"] or "La venta no admite cambios")
+    line = next((item for item in sale["detalles"] if item["id_detalle"] == detail_id), None)
+    if line is None:
+        raise HTTPException(404, "Detalle de venta no encontrado")
+    if quantity < 1 or quantity > line["cantidad_disponible_para_cambio"]:
+        raise HTTPException(409, "La cantidad supera las unidades disponibles para cambio")
+    branch_id = line["id_sucursal"]
+    original = _variant(db, staff.id_organizacion, detail.id_variante)
+    replacement = _variant(db, staff.id_organizacion, replacement_variant_id)
+    if replacement.id_variante == original.id_variante:
+        raise HTTPException(422, "Selecciona una variante distinta a la vendida")
+    if replacement.producto.id_categoria != original.producto.id_categoria:
+        raise HTTPException(422, "El cambio debe respetar la categoría de la prenda vendida")
+    if current_price(db, replacement.producto) != detail.precio_unitario:
+        raise HTTPException(409, "La variante tiene una diferencia de precio; tramita el cambio por el flujo de solicitud para conservar la conciliación financiera.")
+
+    inventory_rows = db.scalars(select(Inventario).where(
+        Inventario.id_sucursal == branch_id,
+        Inventario.id_variante.in_(sorted((original.id_variante, replacement.id_variante))),
+    ).order_by(Inventario.id_variante).with_for_update()).all()
+    by_variant = {row.id_variante: row for row in inventory_rows}
+    original_inventory = by_variant.get(original.id_variante)
+    replacement_inventory = by_variant.get(replacement.id_variante)
+    if original_inventory is None:
+        raise HTTPException(409, "No existe inventario de la prenda vendida en su sucursal")
+    if original_inventory.stock_vendido < quantity:
+        raise HTTPException(409, "El inventario vendido no coincide con la cantidad de la venta")
+    if replacement_inventory is None or replacement_inventory.stock_disponible < quantity:
+        raise HTTPException(409, "No hay stock suficiente de la variante solicitada en esta sucursal")
+
+    exchange = GarmentExchange(
+        organization_id=staff.id_organizacion,
+        operation_uuid=operation_id,
+        customer_id=order.id_cliente,
+        original_order_id=order.id_pedido,
+        original_detail_id=detail.id_detalle,
+        original_variant_id=original.id_variante,
+        replacement_variant_id=replacement.id_variante,
+        branch_id=branch_id,
+        replacement_branch_id=branch_id,
+        original_inventory_id=original_inventory.id_inventario,
+        replacement_inventory_id=replacement_inventory.id_inventario,
+        employee_id=staff.id_usuario,
+        quantity=quantity,
+        purchase_date=order.fecha_pedido,
+        delivery_date=order.fecha_entrega or order.fecha_pedido,
+        requested_at=_now(), reason=reason.strip(),
+        inspection_state="APROBADA", garment_good_condition=True,
+        original_tag_present=True, state="COMPLETADO",
+        original_paid_amount=detail.precio_unitario,
+        replacement_amount=current_price(db, replacement.producto),
+        economic_difference=Decimal("0.00"), financial_state="SIN_DIFERENCIA",
+        physical_original_received=True, physical_replacement_delivered=True,
+        completed_at=_now(),
+    )
+    db.add(exchange)
+    db.flush()
+    for inventory, direction in ((original_inventory, "ENTRADA"), (replacement_inventory, "SALIDA")):
+        before = inventory.stock_disponible
+        if direction == "ENTRADA":
+            inventory.stock_disponible += quantity
+            inventory.stock_vendido -= quantity
+        else:
+            inventory.stock_disponible -= quantity
+            inventory.stock_vendido += quantity
+        db.add(MovimientoInventario(
+            id_inventario=inventory.id_inventario, tipo_movimiento=direction,
+            cantidad=quantity, stock_anterior=before, stock_nuevo=inventory.stock_disponible,
+            motivo=f"Cambio de prenda {exchange.id}: {reason.strip()}"[:255],
+            id_usuario=staff.id_usuario,
+        ))
+    AuditService.record(db, organization_id=staff.id_organizacion,
+        actor_id=staff.id_usuario, actor_role=staff.rol.nombre,
+        action="CAMBIO_PRENDA_REGISTRADO", entity="CambioPrenda", entity_id=exchange.id,
+        result="COMPLETADO", details={"pedido_id": order.id_pedido, "cantidad": quantity},
+        dedupe_key=f"exchange:{staff.id_organizacion}:{operation_id}:staff-completed")
+    return exchange
 
 
 def exchange_record(db: Session, row: GarmentExchange) -> dict:

@@ -30,7 +30,10 @@ describe('TenantSubscriptionComponent', () => {
       { id_plan: 2, codigo: 'MODA', nombre: 'Plan Moda', descripcion: 'Hasta 10 sucursales', max_sucursales: 10,
         caracteristicas: [{ id_plan_caracteristica: 2, codigo: 'reportes_ia', nombre: 'Reportes con IA', descripcion: null, habilitada: true, limite: null, configuracion: null }] },
       { id_plan: 3, codigo: 'GLAMOUR', nombre: 'Plan Glamour', descripcion: 'Sin límite', max_sucursales: null,
-        caracteristicas: [{ id_plan_caracteristica: 3, codigo: 'reportes_gemini', nombre: 'Reportes Gemini', descripcion: null, habilitada: true, limite: null, configuracion: null }] },
+        caracteristicas: [
+          { id_plan_caracteristica: 3, codigo: 'reportes_gemini', nombre: 'Reportes Gemini', descripcion: null, habilitada: true, limite: null, configuracion: null },
+          { id_plan_caracteristica: 4, codigo: 'fidelizacion_clientes', nombre: 'Fidelización de clientes', descripcion: null, habilitada: true, limite: null, configuracion: null },
+        ] },
     ]));
     await TestBed.configureTestingModule({ imports: [TenantSubscriptionComponent], providers: [provideRouter([])] })
       .overrideComponent(TenantSubscriptionComponent, {
@@ -51,6 +54,9 @@ describe('TenantSubscriptionComponent', () => {
     expect(text).toContain('Reportes con IA');
     expect(text).not.toContain('Reportes Gemini');
     expect(component.isFeatureIncluded(component.plans[1], 'reportes_ia')).toBeTrue();
+    expect(component.isFeatureIncluded(component.plans[2], 'fidelizacion_clientes')).toBeTrue();
+    expect(component.isFeatureIncluded(component.plans[0], 'fidelizacion_clientes')).toBeFalse();
+    expect(text).toContain('Fidelización de clientes');
   });
 
   it('does not invent a branch quota for unlimited plans and caps the visual bar', () => {

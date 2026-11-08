@@ -115,3 +115,4 @@ class AiReportResponse(BaseModel):
     metricas_calculadas: dict
     observaciones_ia: list[str]
     recomendaciones_ia: list[str]
+    error_ia: str | None = None

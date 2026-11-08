@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     grok_api_key: str = ""
     grok_model: str = "grok-4.7"
     groq_api_key: SecretStr = SecretStr("")
+    groq_model: str = "openai/gpt-oss-120b"
     ai_config_encryption_key: SecretStr = SecretStr("")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

@@ -7,7 +7,7 @@ import { ReservationOfflineStore } from '../../features/reservations/reservation
 
 export interface OutboxSummary {
   pending: number; sending: number; synchronized: number; rejected: number; retryable: number;
-  lastSync: number | null; online: boolean; errors: OutboxOperation[];
+  lastSync: number | null; online: boolean; errors: OutboxOperation[]; operations?: OutboxOperation[];
 }
 export interface OfflineSaleOrder {
   id_pedido?: number | null; local_operation_uuid: string; numero_local: string; fecha_pedido: string;
@@ -25,7 +25,7 @@ function containsCredential(value: unknown): boolean {
 @Injectable({ providedIn: 'root' })
 export class OutboxSyncService {
   private syncing = false;
-  private readonly state = new BehaviorSubject<OutboxSummary>({ pending: 0, sending: 0, synchronized: 0, rejected: 0, retryable: 0, lastSync: null, online: navigator.onLine, errors: [] });
+  private readonly state = new BehaviorSubject<OutboxSummary>({ pending: 0, sending: 0, synchronized: 0, rejected: 0, retryable: 0, lastSync: null, online: navigator.onLine, errors: [], operations: [] });
   readonly summary$ = this.state.asObservable();
   private readonly connectionChanged = (): void => {
     void this.refresh();
@@ -62,6 +62,21 @@ export class OutboxSyncService {
     if (!row || !['PENDIENTE', 'ERROR_REINTENTABLE'].includes(row.status)) return false;
     if (!await this.store.deletePending(operationUuid)) return false;
     await this.refresh();
+    return true;
+  }
+
+  async retryOperation(operationUuid: string): Promise<boolean> {
+    const scope = this.scope();
+    const owner = this.tokens.getUserId();
+    if (!scope || owner === null) return false;
+    const row = (await this.store.listOutbox(scope, owner)).find(item => item.operation_uuid === operationUuid);
+    if (!row || row.status !== 'ERROR_REINTENTABLE') return false;
+    row.status = 'PENDIENTE';
+    row.error_category = undefined;
+    row.error_message = undefined;
+    await this.store.updateOutbox(row);
+    await this.refresh();
+    if (navigator.onLine) await this.syncPending();
     return true;
   }
 
@@ -276,7 +291,8 @@ export class OutboxSyncService {
       retryable: rows.filter(row => row.status === 'ERROR_REINTENTABLE').length,
       lastSync: scope ? await this.store.getLastSync(scope) : null,
       online: navigator.onLine,
-      errors: rows.filter(row => row.status === 'RECHAZADA' || row.status === 'ERROR_REINTENTABLE')
+      errors: rows.filter(row => row.status === 'RECHAZADA' || row.status === 'ERROR_REINTENTABLE'),
+      operations: rows
     };
     this.state.next(summary);
     return summary;
@@ -293,7 +309,7 @@ export class OutboxSyncService {
       if (!rows.length) return;
       try {
         const response = await this.api.post<{ results: Array<Record<string, unknown>> }>('/api/sync/batch', {
-          operations: rows.map(({ status: _status, attempts: _attempts, error_category: _category, error_message: _message, updated_at: _updated, result: _result, ...wire }) => wire)
+          operations: rows.map(({ status: _status, attempts: _attempts, error_category: _category, error_message: _message, updated_at: _updated, result: _result, owner_user_id: _owner, ...wire }) => wire)
         }).toPromise();
         await this.applyResults(rows, response?.results ?? [], scope);
         await this.store.setLastSync(scope);
@@ -304,7 +320,7 @@ export class OutboxSyncService {
           await this.store.setLastSync(scope);
         } else {
           for (const row of rows) {
-            this.applyFailure(row, error?.status ?? 0, error?.message ?? 'Fallo de sincronización');
+            this.applyFailure(row, error?.status ?? 0, this.errorMessage(error));
             await this.store.updateOutbox(row);
             if (row.operation_type === 'venta.crear') await this.reconcileSale(row, null, row.status, row.error_message);
             if (row.operation_type.startsWith('cambio.')) await this.reconcileExchange(row, null);
@@ -407,8 +423,23 @@ export class OutboxSyncService {
   }
 
   private applyFailure(row: OutboxOperation, status: number, message: string): void {
-    row.status = status === 0 || status >= 500 ? 'ERROR_REINTENTABLE' : 'RECHAZADA';
-    row.error_category = status === 401 || status === 403 ? 'NO_AUTORIZADA' : status === 409 ? 'UUID_REUTILIZADO' : status >= 500 || status === 0 ? 'TEMPORAL' : 'DATOS_INVALIDOS';
+    const retryable = status === 0 || status === 408 || status === 425 || status === 429 || status >= 500;
+    row.status = retryable ? 'ERROR_REINTENTABLE' : 'RECHAZADA';
+    row.error_category = status === 401 || status === 403 ? 'NO_AUTORIZADA' : status === 409 ? 'UUID_REUTILIZADO' : retryable ? 'TEMPORAL' : 'DATOS_INVALIDOS';
     row.error_message = message;
+  }
+
+  private errorMessage(error: any): string {
+    const detail = error?.error?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map(item => {
+        const location = Array.isArray(item?.loc) ? item.loc.filter((part: unknown) => part !== 'body').join('.') : '';
+        const message = typeof item?.msg === 'string' ? item.msg : 'Datos inválidos';
+        return location ? `${location}: ${message}` : message;
+      }).join('; ');
+    }
+    if (typeof error?.error?.message === 'string') return error.error.message;
+    return typeof error?.message === 'string' ? error.message : 'Fallo de sincronización';
   }
 }

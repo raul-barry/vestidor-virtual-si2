@@ -32,6 +32,7 @@ MODA_FEATURES = (
 )
 
 GLAMOUR_FEATURES = (
+    ("fidelizacion_clientes", "Fidelización de clientes", "Programa de puntos y recompensas para clientes de la organización."),
     ("reportes_voz", "Reportes por voz", "Consulta de reportes mediante voz."),
     ("machine_learning", "Machine Learning", "Capacidades analíticas basadas en aprendizaje automático."),
     ("prediccion_demanda", "Predicción de demanda", "Estimación de demanda comercial."),

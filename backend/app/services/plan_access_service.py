@@ -104,6 +104,7 @@ class PlanAccessService:
                 "limit": limit,
                 "current": active_count,
                 "plan": access.plan.codigo,
+                "plan_nombre": access.plan.nombre,
             })
 
     def require_feature(self, feature_code: str, *, commit_expiration: bool = True) -> PlanAccess:

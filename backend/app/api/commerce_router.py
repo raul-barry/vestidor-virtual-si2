@@ -258,6 +258,7 @@ def sale(data: SaleRequest, db: Session = Depends(get_db), user: Usuario = Depen
         db.add(PedidoDetalle(id_pedido=order.id_pedido, id_variante=inv.id_variante, cantidad=quantity, precio_unitario=price))
         previous = inv.stock_disponible
         inv.stock_disponible -= quantity
+        inv.stock_vendido += quantity
         db.add(MovimientoInventario(id_inventario=inv.id_inventario, tipo_movimiento="SALIDA",
             cantidad=quantity, stock_anterior=previous, stock_nuevo=inv.stock_disponible,
             motivo=f"Venta presencial pedido {order.id_pedido}", id_usuario=user.id_usuario))

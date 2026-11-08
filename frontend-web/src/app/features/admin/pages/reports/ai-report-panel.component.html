@@ -62,6 +62,7 @@
 
   @if (result) {
     <div class="report-result">
+      @if (result.error_ia) { <p class="error" role="status">Las métricas están disponibles, pero no se pudo completar el análisis de IA: {{ result.error_ia }}</p> }
       <p class="period">Período analizado: {{ result.periodo.desde }} — {{ result.periodo.hasta }}</p>
       @if (features?.exportacion_pdf_excel) {
         <div class="export-actions" aria-label="Exportar reporte">

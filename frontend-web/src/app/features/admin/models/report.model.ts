@@ -107,6 +107,7 @@ export interface AiReportResponse {
   metricas_calculadas: Record<string, unknown>;
   observaciones_ia: string[];
   recomendaciones_ia: string[];
+  error_ia?: string | null;
 }
 
 export type PredictiveFeatureCode =

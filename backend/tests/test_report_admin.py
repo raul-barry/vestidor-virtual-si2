@@ -2,10 +2,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from conftest import session_token
 from app.main import app
+from app.core.config import settings
 from app.core.tenancy import set_organization_context
 from app.models.audit_log import AuditLog
 from app.models.bitacora import Bitacora
@@ -193,6 +195,24 @@ def test_ai_report_returns_real_metrics_and_audits_without_personal_data(db, mon
     ))
     assert audit is not None
     assert audit.detalles["canal"] == "texto"
+
+
+def test_ai_report_reports_missing_platform_provider_configuration(db, monkeypatch) -> None:
+    headers, _ = create_headers(db, "ADMINISTRADOR", "admin-no-ai@example.com")
+    monkeypatch.setattr(settings, "groq_api_key", SecretStr(""))
+
+    response = TestClient(app).post(
+        "/api/admin/reports/ai",
+        headers=headers,
+        json={"tipo": "ventas", "consulta": "Resume las métricas"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["metricas_calculadas"]["ventas_pagadas"] == "0.00"
+    assert result["observaciones_ia"] == []
+    assert result["recomendaciones_ia"] == []
+    assert "configurada" in result["error_ia"]
 
 
 def test_report_metrics_are_isolated_from_other_organizations(db) -> None:

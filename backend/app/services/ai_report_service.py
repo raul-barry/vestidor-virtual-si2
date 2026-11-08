@@ -141,6 +141,7 @@ class AiReportService:
             "hasta": end.isoformat(),
             "id_sucursal": request.id_sucursal,
         }
+        ai_error = None
         try:
             payload = self.client.generate_content({
                 "contents": [{"parts": [{"text": prompt}]}],
@@ -157,19 +158,15 @@ class AiReportService:
                 },
             }, capability="business_reports")
             observations, recommendations = self._extract_analysis(payload)
-        except AIProviderError:
-            AuditService.record(
-                self.db, organization_id=self.organization_id, actor_id=user.id_usuario,
-                actor_role=user.rol.nombre, action="REPORTE_IA_CONSULTADO",
-                entity="Reporte", entity_id=request.tipo, result="ERROR",
-                details=audit_details,
-            )
-            self.db.commit()
-            raise
+            result = "EXITOSO"
+        except AIProviderError as exc:
+            ai_error = str(exc)
+            observations, recommendations = [], []
+            result = "ERROR"
         AuditService.record(
             self.db, organization_id=self.organization_id, actor_id=user.id_usuario,
             actor_role=user.rol.nombre, action="REPORTE_IA_CONSULTADO",
-            entity="Reporte", entity_id=request.tipo, details=audit_details,
+            entity="Reporte", entity_id=request.tipo, result=result, details=audit_details,
         )
         self.db.commit()
         return AiReportResponse(
@@ -178,6 +175,7 @@ class AiReportService:
             metricas_calculadas=metrics,
             observaciones_ia=observations,
             recomendaciones_ia=recommendations,
+            error_ia=ai_error,
         )
 
     def calculate(self, request: AiReportRequest) -> tuple[date, date, dict]:

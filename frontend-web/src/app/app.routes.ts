@@ -5,7 +5,7 @@ import { platformAdminGuard } from './core/guards/platform-admin.guard';
 import { branchComparisonGuard } from './core/guards/branch-comparison.guard';
 
 export const routes: Routes = [
-  { path: 'admin/exchanges', canActivate: [authGuard], data: {roles: ['ADMINISTRADOR', 'ENCARGADO_SUCURSAL']}, loadComponent: () => import('./features/admin/pages/exchanges/exchange-management.component').then(c => c.ExchangeManagementComponent) },
+  { path: 'admin/exchanges', canActivate: [authGuard], data: {roles: ['ADMINISTRADOR', 'ENCARGADO_SUCURSAL', 'CAJERO']}, loadComponent: () => import('./features/admin/pages/exchanges/exchange-management.component').then(c => c.ExchangeManagementComponent) },
   ...['recommendations', 'fitting'].map(mode => ({path: 'experience/' + mode, canActivate: [authGuard], data: {mode}, loadComponent: () => import('./features/experience/experience.component').then(c => c.ExperienceComponent)})),
   ...['recommendations', 'fitting'].map(mode => ({path: mode, canActivate: [authGuard], data: {mode}, loadComponent: () => import('./features/experience/experience.component').then(c => c.ExperienceComponent)})),
   { path: 'pos', canActivate: [authGuard], data: {roles: ['ADMINISTRADOR', 'CAJERO']}, loadComponent: () => import('./features/commerce/pos.component').then(c => c.PosComponent) },

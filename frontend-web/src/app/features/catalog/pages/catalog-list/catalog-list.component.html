@@ -43,6 +43,8 @@
       <mat-spinner diameter="42"></mat-spinner>
       <span>Cargando catálogo…</span>
     </div>
+  } @else if (products.length === 0 && !online) {
+    <mat-card class="empty-state">No hay un catálogo descargado para esta organización. Conéctate a Internet una vez para guardar los productos y consultarlos offline.</mat-card>
   } @else if (products.length === 0) {
     <mat-card class="empty-state">No se encontraron productos con los filtros aplicados.</mat-card>
   } @else {

@@ -14,6 +14,7 @@ from app.models.rol import Rol
 from app.models.suscripcion import Suscripcion
 from app.models.usuario import Usuario
 from app.services.plan_access_service import PlanAccessService
+from app.database.plan_seed import seed_commercial_plans
 
 
 def _role_admin(db, organization_id: int = 1):
@@ -83,6 +84,7 @@ def test_estilo_allows_two_active_branches_and_blocks_the_third(db):
     assert blocked.json()["detail"]["code"] == "PLAN_LIMIT_REACHED"
     assert blocked.json()["detail"]["limit"] == 2
     assert blocked.json()["detail"]["current"] == 2
+    assert blocked.json()["detail"]["plan_nombre"] == "Plan ESTILO"
 
 
 def test_moda_limit_is_ten_and_glamour_is_unlimited(db):
@@ -145,6 +147,67 @@ def test_feature_matrix_and_tenant_isolation(db):
 
     set_organization_context(db, 3)
     assert PlanAccessService(db).require_feature("machine_learning").plan.codigo == "GLAMOUR"
+
+
+def test_glamour_loyalty_access_uses_active_subscription_and_tenant_scope(db):
+    db.info.pop("organization_id", None)
+    db.add_all([
+        Organizacion(id_organizacion=2, nombre="Glamour Shop", slug="glamour-shop", estado="ACTIVA"),
+        Organizacion(id_organizacion=3, nombre="Cancelled Glamour", slug="cancelled-glamour", estado="ACTIVA"),
+    ])
+    estilo = _add_plan(db, "ESTILO", 2, ("fidelizacion_clientes",))
+    glamour = _add_plan(db, "GLAMOUR", None, ("fidelizacion_clientes",))
+    style_feature = db.scalar(select(PlanCaracteristica).where(
+        PlanCaracteristica.plan_id == estilo.id_plan,
+        PlanCaracteristica.codigo == "fidelizacion_clientes",
+    ))
+    style_feature.habilitada = False
+    _subscribe(db, 1, estilo)
+    _subscribe(db, 2, glamour)
+    _subscribe(db, 3, glamour, state="CANCELADA")
+    db.commit()
+
+    client = TestClient(app)
+    style_admin = _role_admin(db, 1)
+    glamour_admin = _role_admin(db, 2)
+    cancelled_admin = _role_admin(db, 3)
+    assert client.get("/api/loyalty/program", headers=glamour_admin).status_code == 200
+    assert client.get("/api/loyalty/program", headers=style_admin).status_code == 403
+    assert client.get("/api/loyalty/program", headers=cancelled_admin).status_code == 403
+
+    set_organization_context(db, 2)
+    assert PlanAccessService(db).require_feature("fidelizacion_clientes").plan.codigo == "GLAMOUR"
+
+    set_organization_context(db, 1)
+    with pytest.raises(HTTPException) as blocked_style:
+        PlanAccessService(db).require_feature("fidelizacion_clientes")
+    assert blocked_style.value.status_code == 403
+    assert blocked_style.value.detail["code"] == "PLAN_FEATURE_NOT_INCLUDED"
+
+    set_organization_context(db, 3)
+    with pytest.raises(HTTPException) as blocked_cancelled:
+        PlanAccessService(db).require_feature("fidelizacion_clientes")
+    assert blocked_cancelled.value.status_code == 403
+    assert blocked_cancelled.value.detail["code"] == "SUBSCRIPTION_REQUIRED"
+
+
+def test_commercial_plan_seed_includes_loyalty_only_for_glamour_and_is_idempotent(db):
+    db.info.pop("organization_id", None)
+    seed_commercial_plans(db)
+    db.flush()
+    plans = {plan.codigo: plan for plan in db.scalars(select(Plan)).all()}
+    glamour_feature = db.scalar(select(PlanCaracteristica).where(
+        PlanCaracteristica.plan_id == plans["GLAMOUR"].id_plan,
+        PlanCaracteristica.codigo == "fidelizacion_clientes",
+    ))
+    assert glamour_feature is not None and glamour_feature.habilitada is True
+    for code in ("ESTILO", "MODA"):
+        assert db.scalar(select(PlanCaracteristica.id_plan_caracteristica).where(
+            PlanCaracteristica.plan_id == plans[code].id_plan,
+            PlanCaracteristica.codigo == "fidelizacion_clientes",
+        )) is None
+
+    assert seed_commercial_plans(db) == 0
 
 
 def test_canonical_ai_feature_overrides_legacy_setting(db):

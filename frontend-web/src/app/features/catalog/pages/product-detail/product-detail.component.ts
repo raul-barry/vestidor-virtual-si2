@@ -72,18 +72,8 @@ export class ProductDetailComponent implements OnInit {
     }
 
     this.productId = productId;
-    if (this.catalogService.online === false) {
-      this.offline = true;
-      this.catalogService.getProducts().subscribe({
-        next: products => {
-          const product = products.find(item => item.id_producto === productId);
-          if (!product) { this.handleError(); return; }
-          this.variants = { id_producto: product.id_producto, nombre_producto: product.nombre, tallas: [...new Set(product.variantes.map(v => v.talla))], colores: [...new Set(product.variantes.map(v => v.color))], variantes: product.variantes };
-          this.availability = { id_producto: product.id_producto, nombre_producto: product.nombre, disponibilidad: [] };
-          this.price = product.precio_base; this.description = product.descripcion ?? '';
-          this.imageUrl = this.resolveImageUrl(product.imagen_url); this.isLoading = false;
-        }, error: () => this.handleError()
-      });
+    if (this.catalogService.servingOfflineData) {
+      this.loadCachedDetail(productId);
       return;
     }
     forkJoin({
@@ -108,8 +98,29 @@ export class ProductDetailComponent implements OnInit {
         this.isLoading = false;
         this.recordPreference('vista');
       },
-      error: () => this.handleError()
+      error: () => this.loadCachedDetail(productId)
     });
+  }
+
+  private loadCachedDetail(productId: number): void {
+    this.catalogService.getCachedProducts().subscribe(snapshot => {
+      const product = snapshot.products.find(item => item.id_producto === productId);
+      if (!product) {
+        this.handleError('Este detalle no está disponible sin conexión porque no se descargó previamente.');
+        return;
+      }
+      this.offline = true;
+      this.variants = {
+        id_producto: product.id_producto, nombre_producto: product.nombre,
+        tallas: [...new Set(product.variantes.map(variant => variant.talla))],
+        colores: [...new Set(product.variantes.map(variant => variant.color))], variantes: product.variantes
+      };
+      this.availability = { id_producto: product.id_producto, nombre_producto: product.nombre, disponibilidad: [] };
+      this.price = product.precio_base;
+      this.description = product.descripcion ?? '';
+      this.imageUrl = this.resolveImageUrl(product.imagen_url);
+      this.isLoading = false;
+    }, () => this.handleError('No fue posible leer el detalle almacenado en este dispositivo.'));
   }
 
   selectVariant(variant: ProductoVariante | null): void {
@@ -188,9 +199,9 @@ export class ProductDetailComponent implements OnInit {
     });
   }
 
-  private handleError(): void {
+  private handleError(message = 'No fue posible cargar el detalle del producto'): void {
     this.isLoading = false;
-    this.snackBar.open('No fue posible cargar el detalle del producto', 'Cerrar', { duration: 5000 });
+    this.snackBar.open(message, 'Cerrar', { duration: 5000 });
   }
 
   reserveSelectedVariant(): void {

@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { OutboxSyncService } from '../../core/services/outbox-sync.service';
 import { PosComponent } from './pos.component';
@@ -57,5 +57,33 @@ describe('PosComponent offline sales', () => {
 
     expect(outbox.queuePosCashSale).not.toHaveBeenCalled();
     expect(component.message).toContain('solo admiten efectivo');
+  });
+
+  it('shows a readable validation message when points redemption is rejected', () => {
+    onlineSpy.and.returnValue(true);
+    const component = fixture.componentInstance;
+    api.post.and.returnValue(throwError(() => ({status:422,error:{detail:[
+      {loc:['body','points'],msg:'Input should be greater than 0'}
+    ]}})) as any);
+    component.customerId = 11;
+    component.pointsToRedeem = 5;
+    component.lines = [{ id_inventario: 21, id_variante: 31, id_sucursal: 41, cantidad: 1, precio: '25.00' }];
+    component.estimateLoyalty();
+    expect(component.loyaltyError).toBe('El campo puntos a canjear debe ser mayor que cero.');
+    expect(component.loyaltyError).not.toContain('[object Object]');
+  });
+
+  it('shows a readable server message when a points-bearing sale is rejected', async () => {
+    onlineSpy.and.returnValue(true);
+    const component = fixture.componentInstance;
+    api.post.and.returnValue(throwError(() => ({status:403,error:{detail:{message:'El canje supera el saldo disponible.'}}})) as any);
+    component.customerId = 11;
+    component.pointsToRedeem = 5;
+    component.branchId = 41;
+    component.paymentMethod = 'QR';
+    component.lines = [{ id_inventario: 21, id_variante: 31, id_sucursal: 41, cantidad: 1, precio: '25.00' }];
+    await component.sell();
+    expect(component.message).toBe('El canje supera el saldo disponible.');
+    expect(component.message).not.toMatch(/\[object Object\]|undefined|null/);
   });
 });

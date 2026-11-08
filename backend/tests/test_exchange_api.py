@@ -259,3 +259,144 @@ def test_organization_branch_and_holiday_data_are_tenant_scoped(db):
     })
     assert response.status_code == 422
     assert client.get("/api/admin/exchanges/holidays", headers=customer_headers).status_code == 403
+
+
+def _prepare_staff_exchange(db, setup):
+    client, _, _, manager, manager_headers, _, _, original, original_inventory, _, _, order, detail = setup
+    manager.id_sucursal = original_inventory.id_sucursal
+    original_inventory.stock_vendido = 1
+    replacement = db.scalar(select(ProductoVariante).where(
+        ProductoVariante.id_producto == original.id_producto,
+        ProductoVariante.id_variante != original.id_variante,
+    ).order_by(ProductoVariante.id_variante))
+    assert replacement is not None
+    replacement_inventory = db.scalar(select(Inventario).where(
+        Inventario.id_sucursal == original_inventory.id_sucursal,
+        Inventario.id_variante == replacement.id_variante,
+    ))
+    if replacement_inventory is None:
+        replacement_inventory = Inventario(id_sucursal=original_inventory.id_sucursal,
+            id_variante=replacement.id_variante, stock_disponible=2, stock_reservado=0, stock_vendido=0)
+        db.add(replacement_inventory)
+    else:
+        replacement_inventory.stock_disponible = 2
+    db.commit()
+    return client, manager_headers, order, detail, original_inventory, replacement, replacement_inventory
+
+
+def test_staff_sale_lookup_and_exchange_commit_stock_history_and_idempotency(db):
+    setup = _setup(db)
+    client, manager_headers, order, detail, original_inventory, replacement, replacement_inventory = _prepare_staff_exchange(db, setup)
+    order.id_cliente = None  # POS consumidor final: tenant is identified by its seller/branch.
+    order.id_vendedor = setup[3].id_usuario
+    paid_on = (datetime.now(timezone.utc) - timedelta(days=7)).date()
+    db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido)).fecha_pago = datetime.combine(
+        paid_on, datetime.min.time(), tzinfo=timezone.utc)
+    db.commit()
+    lookup = client.get(f"/api/admin/exchanges/sales/PED-{order.id_pedido}", headers=manager_headers)
+    assert lookup.status_code == 200, lookup.text
+    sale = lookup.json()
+    assert sale["codigo"] == f"PED-{order.id_pedido}" and sale["elegible"] is True
+    assert sale["detalles"][0]["cantidad_disponible_para_cambio"] == 1
+    cashier = db.scalar(select(Usuario).where(Usuario.correo == "cajero@vestidor.local"))
+    cashier.id_sucursal = original_inventory.id_sucursal
+    db.commit()
+    cashier_headers = {"Authorization": f"Bearer {session_token(db, {'id_usuario': cashier.id_usuario, 'rol': 'CAJERO'})}"}
+    cashier_lookup = client.get(f"/api/admin/exchanges/sales/{order.id_pedido}", headers=cashier_headers)
+    assert cashier_lookup.status_code == 200 and cashier_lookup.json()["elegible"] is True
+    operation_uuid = str(uuid4())
+    body = {"operation_uuid": operation_uuid, "id_detalle": detail.id_detalle,
+        "id_variante_sustituta": replacement.id_variante, "cantidad": 1, "motivo": "Cambio de talla"}
+    before_original = (original_inventory.stock_disponible, original_inventory.stock_vendido)
+    before_replacement = (replacement_inventory.stock_disponible, replacement_inventory.stock_vendido)
+
+    registered = client.post("/api/admin/exchanges/register", headers=manager_headers, json=body)
+    replay = client.post("/api/admin/exchanges/register", headers=manager_headers, json=body)
+    assert registered.status_code == replay.status_code == 201
+    assert registered.json()["id"] == replay.json()["id"]
+    assert registered.json()["state"] == "COMPLETADO"
+    db.refresh(original_inventory)
+    db.refresh(replacement_inventory)
+    assert (original_inventory.stock_disponible, original_inventory.stock_vendido) == (before_original[0] + 1, before_original[1] - 1)
+    assert (replacement_inventory.stock_disponible, replacement_inventory.stock_vendido) == (before_replacement[0] - 1, before_replacement[1] + 1)
+    assert db.scalar(select(func.count()).select_from(MovimientoInventario).where(
+        MovimientoInventario.motivo.like(f"Cambio de prenda {registered.json()['id']}:%"))) == 2
+    assert client.get(f"/api/admin/exchanges/sales/{order.id_pedido}", headers=manager_headers).json()["detalles"][0]["cantidad_disponible_para_cambio"] == 0
+    assert client.get("/api/admin/exchanges", headers=manager_headers).json()[0]["id"] == registered.json()["id"]
+
+
+def test_staff_exchange_rejects_expired_and_unconfirmed_sales_without_stock_changes(db):
+    setup = _setup(db)
+    client, manager_headers, order, detail, original_inventory, replacement, replacement_inventory = _prepare_staff_exchange(db, setup)
+    payment = db.scalar(select(Pago).where(Pago.id_pedido == order.id_pedido))
+    before = (original_inventory.stock_disponible, original_inventory.stock_vendido,
+              replacement_inventory.stock_disponible, replacement_inventory.stock_vendido)
+    payment.fecha_pago = datetime.now(timezone.utc) - timedelta(days=8)
+    db.commit()
+    lookup = client.get(f"/api/admin/exchanges/sales/{order.id_pedido}", headers=manager_headers)
+    assert lookup.status_code == 200 and lookup.json()["elegible"] is False
+    assert "7 días" in lookup.json()["motivo_no_elegible"]
+    body = {"operation_uuid": str(uuid4()), "id_detalle": detail.id_detalle,
+        "id_variante_sustituta": replacement.id_variante, "cantidad": 1, "motivo": "Cambio de talla"}
+    expired = client.post("/api/admin/exchanges/register", headers=manager_headers, json=body)
+    assert expired.status_code == 422 and "venció" in expired.json()["detail"]
+    payment.fecha_pago = datetime.now(timezone.utc)
+    order.estado = "PENDIENTE"
+    db.commit()
+    unconfirmed = client.post("/api/admin/exchanges/register", headers=manager_headers,
+        json={**body, "operation_uuid": str(uuid4())})
+    assert unconfirmed.status_code == 422 and "no está confirmada" in unconfirmed.json()["detail"]
+    db.refresh(original_inventory)
+    db.refresh(replacement_inventory)
+    assert (original_inventory.stock_disponible, original_inventory.stock_vendido,
+            replacement_inventory.stock_disponible, replacement_inventory.stock_vendido) == before
+    assert db.scalar(select(func.count()).select_from(GarmentExchange)) == 0
+
+
+def test_staff_exchange_rejects_insufficient_stock_and_foreign_sale_lookup(db):
+    setup = _setup(db)
+    client, manager_headers, order, detail, original_inventory, replacement, replacement_inventory = _prepare_staff_exchange(db, setup)
+    replacement_inventory.stock_disponible = 0
+    db.commit()
+    before = (original_inventory.stock_disponible, original_inventory.stock_vendido)
+    body = {"operation_uuid": str(uuid4()), "id_detalle": detail.id_detalle,
+        "id_variante_sustituta": replacement.id_variante, "cantidad": 1, "motivo": "Cambio de talla"}
+    response = client.post("/api/admin/exchanges/register", headers=manager_headers, json=body)
+    assert response.status_code == 409 and "stock suficiente" in response.json()["detail"]
+    db.refresh(original_inventory)
+    assert (original_inventory.stock_disponible, original_inventory.stock_vendido) == before
+    assert client.get("/api/admin/exchanges/sales/999999", headers=manager_headers).status_code == 404
+    assert client.get(f"/api/admin/exchanges/sales/{order.id_pedido}", headers=setup[2]).status_code == 403
+
+    from app.models.organizacion import Organizacion
+    from app.models.sucursal import Sucursal
+
+    db.info.pop("organization_id", None)
+    foreign_org = Organizacion(nombre="Empresa privada CU7", slug="cu7-privada", estado="ACTIVA")
+    db.add(foreign_org)
+    db.flush()
+    foreign_branch = Sucursal(id_organizacion=foreign_org.id_organizacion, nombre="Sucursal CU7 privada",
+        direccion="Prueba aislada", estado="ACTIVA")
+    db.add(foreign_branch)
+    db.flush()
+    foreign_product = Producto(id_organizacion=foreign_org.id_organizacion,
+        id_categoria=original_inventory.variante.producto.id_categoria,
+        nombre="Producto privado CU7", precio_base=Decimal("100.00"), estado="ACTIVO")
+    db.add(foreign_product)
+    db.flush()
+    foreign_variant = ProductoVariante(id_producto=foreign_product.id_producto,
+        id_talla=original_inventory.variante.id_talla, id_color=original_inventory.variante.id_color,
+        sku=f"CU7-PRIVATE-{uuid4()}", estado="ACTIVO")
+    db.add(foreign_variant)
+    db.flush()
+    foreign_order = Pedido(id_sucursal_entrega=foreign_branch.id_sucursal, estado="ENTREGADO",
+        tipo_venta="PRESENCIAL", total=Decimal("100.00"))
+    db.add(foreign_order)
+    db.flush()
+    db.add(PedidoDetalle(id_pedido=foreign_order.id_pedido, id_variante=foreign_variant.id_variante,
+        cantidad=1, precio_unitario=Decimal("100.00")))
+    db.add(Pago(id_pedido=foreign_order.id_pedido, metodo_pago="EFECTIVO", monto=Decimal("100.00"), estado="PAGADO"))
+    db.commit()
+    foreign_sale_id = foreign_order.id_pedido
+    db.info["organization_id"] = setup[3].id_organizacion
+    assert client.get(f"/api/admin/exchanges/sales/{foreign_sale_id}", headers=manager_headers).status_code == 404

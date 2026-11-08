@@ -11,6 +11,7 @@
     <header class="detail-header">
       <p>DETALLE DE PRODUCTO</p>
       <h1>{{ variants.nombre_producto }}</h1>
+      @if (offline) { <p role="status">Modo offline: variantes y precio corresponden al catálogo descargado. La disponibilidad por sucursal solo aparecerá si se almacenó previamente.</p> }
     </header>
 
     <section class="detail-grid">

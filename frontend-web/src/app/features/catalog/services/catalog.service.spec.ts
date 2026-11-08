@@ -1,21 +1,29 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { CatalogService } from './catalog.service';
 import { PublicOrganizationContextService } from './public-organization-context.service';
+import { CatalogOfflineStore } from './catalog-offline.store';
 
 describe('CatalogService tenant context', () => {
   let api: jasmine.SpyObj<ApiService>;
   let context: { isAuthenticated: boolean; publicSlug: string | null; canLoadCatalog: boolean };
   let service: CatalogService;
+  let offlineStore: jasmine.SpyObj<any>;
 
   beforeEach(() => {
     api = jasmine.createSpyObj<ApiService>('ApiService', ['get']);
     api.get.and.returnValue(of([]));
+    offlineStore = jasmine.createSpyObj('CatalogOfflineStore', ['get', 'put']);
+    offlineStore.get.and.resolveTo({ key: 'slug:urbanvogue', products: [{
+      id_producto: 9, nombre: 'Camisa Urban', descripcion: null, precio_base: '30.00', estado: 'ACTIVO',
+      categoria: { id_categoria: 1, nombre: 'Camisas' }, variantes: []
+    }], syncedAt: 123 });
     context = { isAuthenticated: false, publicSlug: 'urbanvogue', canLoadCatalog: true };
     TestBed.configureTestingModule({ providers: [
       CatalogService,
       { provide: ApiService, useValue: api },
+      { provide: CatalogOfflineStore, useValue: offlineStore },
       { provide: PublicOrganizationContextService, useValue: context }
     ] });
     service = TestBed.inject(CatalogService);
@@ -49,5 +57,14 @@ describe('CatalogService tenant context', () => {
     context.publicSlug = null;
     expect(() => service.getProducts()).toThrowError(/organization_slug/);
     expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the selected tenant snapshot when online search cannot reach the API', (done) => {
+    api.get.and.returnValue(throwError(() => ({ status: 0 })));
+    service.searchProducts({ nombre: 'urban' }).subscribe(products => {
+      expect(products.map(product => product.id_producto)).toEqual([9]);
+      expect(service.servingOfflineData).toBeTrue();
+      done();
+    });
   });
 });

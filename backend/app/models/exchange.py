@@ -28,7 +28,7 @@ class GarmentExchange(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizacion.id_organizacion", ondelete="RESTRICT"), nullable=False, index=True)
     operation_uuid: Mapped[str] = mapped_column(String(36), nullable=False)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("cliente.id_cliente"), nullable=False, index=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("cliente.id_cliente"), nullable=True, index=True)
     original_order_id: Mapped[int] = mapped_column(ForeignKey("pedido.id_pedido"), nullable=False, index=True)
     original_detail_id: Mapped[int] = mapped_column(ForeignKey("pedido_detalle.id_detalle"), nullable=False)
     original_variant_id: Mapped[int] = mapped_column(ForeignKey("producto_variante.id_variante"), nullable=False)

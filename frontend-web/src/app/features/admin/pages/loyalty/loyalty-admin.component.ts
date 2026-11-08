@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../../core/services/api.service';
+import { loyaltyErrorMessage } from '../../../loyalty/loyalty-error-message';
 
 @Component({
   standalone: true,
@@ -33,10 +34,10 @@ export class LoyaltyAdminComponent implements OnInit {
   ngOnInit(): void { this.load(); }
   load(): void {
     this.busy=true;this.error='';
-    this.api.get<any>('/api/loyalty/program').subscribe({next:r=>{this.program=r.program;this.tiers=r.tiers??[];if(r.program)this.form={...r.program};this.api.get<any>('/api/loyalty/admin/summary').subscribe({next:s=>{this.summary=s;this.busy=false;},error:e=>{this.fail(e);}});},error:e=>this.fail(e)});
+    this.api.get<any>('/api/loyalty/program').subscribe({next:r=>{this.program=r.program;this.tiers=r.tiers??[];if(r.program)this.form={...r.program};this.api.get<any>('/api/loyalty/admin/summary').subscribe({next:s=>{this.summary=s;this.busy=false;},error:e=>{this.fail(e, 'No se pudo cargar el resumen de fidelizaci\u00f3n.');}});},error:e=>this.fail(e, 'No se pudo cargar la configuraci\u00f3n del programa de fidelizaci\u00f3n.')});
   }
-  save(): void {this.busy=true;this.error='';this.api.put<any>('/api/loyalty/program',{...this.form,expiration_days:this.form.expiration_days||null}).subscribe({next:()=>{this.message='Programa actualizado.';this.load();},error:e=>this.fail(e)});}
-  saveTiers(): void {this.busy=true;this.api.put<any>('/api/loyalty/tiers',{tiers:this.tiers.map(t=>({...t,minimum_points:Number(t.minimum_points)}))}).subscribe({next:r=>{this.tiers=r;this.busy=false;this.message='Niveles actualizados.';},error:e=>this.fail(e)});}
+  save(): void {this.busy=true;this.error='';this.api.put<any>('/api/loyalty/program',{...this.form,expiration_days:this.form.expiration_days||null}).subscribe({next:()=>{this.message='Programa actualizado.';this.load();},error:e=>this.fail(e, 'No se pudo guardar el programa de fidelizaci\u00f3n.')});}
+  saveTiers(): void {this.busy=true;this.api.put<any>('/api/loyalty/tiers',{tiers:this.tiers.map(t=>({...t,minimum_points:Number(t.minimum_points)}))}).subscribe({next:r=>{this.tiers=r;this.busy=false;this.message='Niveles actualizados.';},error:e=>this.fail(e, 'No se pudieron guardar los niveles de fidelizaci\u00f3n.')});}
   customerName(accountId:number):string{return this.summary?.customers?.find((x:any)=>x.customer_id===accountId)?.name??`Cuenta ${accountId}`;}
-  private fail(error:any):void{this.busy=false;this.error=error?.error?.detail??'No se pudo cargar o guardar la fidelización.';}
+  private fail(error:unknown, fallback = 'No se pudo completar la operaci\u00f3n de fidelizaci\u00f3n.'):void{this.busy=false;this.error=loyaltyErrorMessage(error, fallback);}
 }

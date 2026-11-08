@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from fastapi.testclient import TestClient
+import httpx
+import pytest
 from sqlalchemy import select
 
 from conftest import session_token
@@ -42,7 +44,7 @@ def test_api_key_is_encrypted_and_never_returned(monkeypatch):
     rendered = public_config(config)
     assert encrypted != secret
     assert rendered["configured"] is True
-    assert rendered["masked_api_key"].endswith("1234")
+    assert rendered["masked_api_key"] == "Configurada en plataforma"
     assert secret not in repr(rendered)
 
 
@@ -66,6 +68,103 @@ def test_groq_environment_key_is_fallback_and_database_key_has_priority(monkeypa
     assert provider._api_key() == "database-key"
 
 
+def test_broken_platform_cipher_falls_back_to_environment_key(monkeypatch):
+    monkeypatch.setattr(settings, "ai_config_encryption_key", SecretStr(Fernet.generate_key().decode("ascii")))
+    monkeypatch.setattr(settings, "groq_api_key", SecretStr("environment-key"))
+    invalid_config = PlatformAIConfig(
+        id=1, encrypted_api_key=Fernet.generate_key().decode("ascii"), models={}
+    )
+    provider = AIProviderService()
+    provider._config = lambda: invalid_config
+
+    assert provider._api_key() == "environment-key"
+    public = public_config(invalid_config)
+    assert public["configured"] is True
+    assert public["masked_api_key"] == "Configurada por entorno"
+    assert "environment-key" not in repr(public)
+
+
+def test_groq_model_environment_overrides_administrative_text_model(monkeypatch):
+    monkeypatch.setattr(settings, "groq_model", "openai/gpt-oss-120b")
+    config = PlatformAIConfig(id=1, models={
+        "primary_model": "stale-model", "fast_model": "another-stale-model",
+        "capability_models": {key: "stale-model" for key in CAPABILITY_MODELS},
+    })
+    provider = AIProviderService()
+    provider._config = lambda: config
+
+    assert provider._models()["primary_model"] == "openai/gpt-oss-120b"
+    assert provider._models()["fast_model"] == "openai/gpt-oss-120b"
+    assert {provider._capability_models()[key] for key in {
+        "general_chat", "complex_reasoning", "business_reports", "sales_analysis", "recommendations", "uml_assistant"
+    }} == {"openai/gpt-oss-120b"}
+    assert public_config(config)["primary_model"] == "openai/gpt-oss-120b"
+
+
+def test_missing_platform_and_environment_keys_returns_configuration_error(monkeypatch):
+    monkeypatch.setattr(settings, "groq_api_key", SecretStr(""))
+    provider = AIProviderService()
+
+    with pytest.raises(AIProviderError) as error:
+        provider._api_key()
+    assert "configurada" in str(error.value)
+
+
+def test_chat_completion_parses_provider_response_without_exposing_key():
+    captured = {}
+
+    class Response:
+        status_code = 200
+        def json(self):
+            return {"choices": [{"message": {"content": "{\"observaciones\":[],\"recomendaciones\":[]}"}}]}
+
+    class Client:
+        def __init__(self, *, timeout): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, *, headers, json):
+            captured.update(url=url, authorization=headers["Authorization"], body=json)
+            return Response()
+
+    provider = AIProviderService(http_client_factory=Client)
+    provider._api_key = lambda override=None: "test-key"
+    provider._capability_models = lambda: {**CAPABILITY_MODELS, "business_reports": "test-report-model"}
+    result = provider.generate_content(
+        {"contents": [{"parts": [{"text": "Métricas agregadas"}]}]},
+        capability="business_reports",
+    )
+
+    assert result["candidates"][0]["content"]["parts"][0]["text"].startswith("{")
+    assert captured["url"].endswith("/chat/completions")
+    assert captured["authorization"] == "Bearer test-key"
+    assert captured["body"]["model"] == "test-report-model"
+
+
+def test_chat_connection_error_is_sanitized_and_retried_once():
+    state = {"calls": 0}
+
+    class Client:
+        def __init__(self, *, timeout): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, *args, **kwargs):
+            state["calls"] += 1
+            raise httpx.ConnectError("test network failure", request=httpx.Request("POST", "https://example.test"))
+
+    provider = AIProviderService(http_client_factory=Client)
+    provider._api_key = lambda override=None: "secret-test-key"
+    provider._capability_models = lambda: dict(CAPABILITY_MODELS)
+
+    with pytest.raises(AIProviderError, match="No fue posible conectar con Groq") as error:
+        provider.generate_content(
+            {"contents": [{"parts": [{"text": "Métricas agregadas"}]}]},
+            capability="business_reports",
+        )
+
+    assert state["calls"] == 2
+    assert "secret-test-key" not in str(error.value)
+
+
 def test_capability_assignment_selects_model_without_falling_back(monkeypatch):
     provider = AIProviderService()
     provider._api_key = lambda override=None: "test-key"
@@ -83,7 +182,7 @@ def test_capability_assignment_selects_model_without_falling_back(monkeypatch):
         assert "no está registrada" in str(error)
 
     provider.generate_content({"contents": [{"parts": [{"text": "pregunta sencilla"}]}]}, capability="general_chat")
-    assert captured["model"] == "openai/gpt-oss-20b"
+    assert captured["model"] == "openai/gpt-oss-120b"
     assert captured["reasoning_effort"] == "low"
 
 
@@ -148,6 +247,7 @@ def test_models_are_read_from_groq_and_marked_experimental(monkeypatch):
 
 
 def test_selected_models_must_be_active_and_match_their_capabilities(monkeypatch):
+    monkeypatch.setattr(settings, "groq_model", "text-model")
     rows = [
         {"id": "text-model", "active": True, "capabilities": ["text"]},
         {"id": "vision-model", "active": True, "capabilities": ["text", "vision"]},
@@ -171,6 +271,7 @@ def test_selected_models_must_be_active_and_match_their_capabilities(monkeypatch
 
 def test_platform_admin_can_save_encrypted_config_but_tenant_admin_cannot(db, monkeypatch):
     monkeypatch.setattr(settings, "ai_config_encryption_key", SecretStr(Fernet.generate_key().decode("ascii")))
+    monkeypatch.setattr(settings, "groq_model", "test-primary")
     platform_headers = _headers(db, "ADMINISTRADOR_PLATAFORMA", "platform-ai@example.test")
     tenant_headers = _headers(db, "ADMINISTRADOR", "tenant-ai@example.test")
     available = {"test-primary", "test-fast", "test-vision", "test-transcription"}
@@ -202,7 +303,11 @@ def test_platform_admin_can_save_encrypted_config_but_tenant_admin_cannot(db, mo
     assert "gsk_secret_never_returned" not in loaded.text
     row = db.scalar(select(PlatformAIConfig).where(PlatformAIConfig.id == 1))
     assert row.encrypted_api_key != payload["api_key"]
-    assert row.models["capability_models"] == payload["capability_models"]
+    assert row.models["capability_models"]["general_chat"] == "test-primary"
+    assert row.models["capability_models"]["complex_reasoning"] == "test-primary"
+    assert row.models["capability_models"]["business_reports"] == "test-primary"
+    assert row.models["capability_models"]["image_understanding"] == "test-vision"
+    assert row.models["capability_models"]["speech_transcription"] == "test-transcription"
     audit = db.scalar(select(PlatformAIConfigAudit).where(
         PlatformAIConfigAudit.action == "CONFIGURACION_GROQ_GUARDADA"
     ))
@@ -211,6 +316,7 @@ def test_platform_admin_can_save_encrypted_config_but_tenant_admin_cannot(db, mo
 
 def test_connection_test_is_real_and_updates_status(db, monkeypatch):
     monkeypatch.setattr(settings, "ai_config_encryption_key", SecretStr(Fernet.generate_key().decode("ascii")))
+    monkeypatch.setattr(settings, "groq_model", "known-model")
     headers = _headers(db, "ADMINISTRADOR_PLATAFORMA", "platform-ai-test@example.test")
     monkeypatch.setattr(AIProviderService, "list_models", lambda self, api_key=None: [
         {"id": "known-model", "active": True, "experimental": False, "capabilities": ["text"]}
