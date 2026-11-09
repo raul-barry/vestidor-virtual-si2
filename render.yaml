@@ -1,7 +1,7 @@
 databases:
   - name: vestidor-db
-    databaseName: vestidor_virtual
-    user: vestidor_user
+    databaseName: vestidor_db
+    user: vestidor_db_user
     plan: free
 
 services:
