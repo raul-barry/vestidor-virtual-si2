@@ -81,7 +81,7 @@ def test_purchase_history_and_user_isolation(db):
     order = client.post('/api/orders', headers=auth).json()
     # Unpaid orders do not count as purchases.
     assert all(r['puntuacion'] == 0 for r in client.get('/api/recommendations', headers=auth).json())
-    payment = client.post('/api/payments', headers=auth, json={'id_pedido': order['id_pedido'], 'metodo_pago': 'QR'}).json()
+    payment = client.post('/api/payments/qr', headers=auth, json={'id_pedido': order['id_pedido'], 'metodo_pago': 'QR'}).json()['payment']
     assert client.put(f"/api/payments/{payment['id_pago']}/approve", headers=auth).status_code == 200
     recommended = client.get('/api/recommendations', headers=auth).json()[0]
     assert recommended['id_producto'] == product['id_producto']

@@ -16,7 +16,7 @@ def _auth(db, role, email, organization=1):
         row = Rol(nombre=role, estado="ACTIVO")
         db.add(row)
         db.flush()
-    user = Usuario(id_organizacion=organization, id_rol=row.id_rol,
+    user = Usuario(id_organizacion=None if role == "ADMINISTRADOR_PLATAFORMA" else organization, id_rol=row.id_rol,
                    nombres="Test", apellidos="Audit", correo=email,
                    password_hash="secret-hash", estado="ACTIVO")
     db.add(user)

@@ -56,7 +56,7 @@ def test_payment_consumes_stock_once_and_rejects_shortage(db):
     original = inv.stock_disponible
     assert client.post('/api/cart/items', headers=customer, json={"id_variante": inv.id_variante, "cantidad": 2}).status_code == 200
     order = client.post('/api/orders', headers=customer).json()
-    payment = client.post('/api/payments', headers=customer, json={"id_pedido": order['id_pedido'], "metodo_pago": "QR"}).json()
+    payment = client.post('/api/payments/qr', headers=customer, json={"id_pedido": order['id_pedido'], "metodo_pago": "QR"}).json()['payment']
     path = f"/api/payments/{payment['id_pago']}/approve"
     assert client.put(path, headers=customer).status_code == 200
     assert client.put(path, headers=customer).status_code == 409

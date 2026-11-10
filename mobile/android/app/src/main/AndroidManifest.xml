@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
-    <application android:usesCleartextTraffic="true"
+    <application android:usesCleartextTraffic="false"
         android:label="vestidor_virtual_mobile"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

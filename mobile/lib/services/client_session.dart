@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'client_repository.dart';
 import 'session_store.dart';
+import '../core/config/api_config.dart';
 
 class ClientSession extends ChangeNotifier {
   ClientSession(this.repository, this.store) {
@@ -19,6 +20,7 @@ class ClientSession extends ChangeNotifier {
     final value = claims(repository.api.token ?? '')?['id_organizacion'];
     return value is num && value > 0 ? value.toInt() : null;
   }
+
   int? get userId {
     final value = claims(repository.api.token ?? '')?['id_usuario'];
     return value is num && value > 0 ? value.toInt() : null;
@@ -49,13 +51,19 @@ class ClientSession extends ChangeNotifier {
   static String validateServer(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null ||
-        !['http', 'https'].contains(uri.scheme) ||
+        !(uri.scheme == 'https' ||
+            (uri.scheme == 'http' && ApiConfig.allowInsecureApi)) ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         uri.hasQuery ||
         uri.hasFragment) {
       throw ApiException(0,
           'Dirección de API inválida. Usa http:// o https:// y un servidor.');
+    }
+    if (!ApiConfig.allowInsecureApi &&
+        uri.origin != Uri.parse(ApiConfig.baseUrl).origin) {
+      throw ApiException(0,
+          'La app de producción solo puede usar la API oficial de FashionStore.');
     }
     return value.trim().replaceFirst(RegExp(r'/+$'), '');
   }
@@ -70,7 +78,16 @@ class ClientSession extends ChangeNotifier {
           await store.clear();
           notice = 'La sesión venció. Inicia sesión nuevamente.';
         } else {
-          repository.api.baseUrl = validateServer(data['server'] as String);
+          final savedServer = data['server'];
+          try {
+            repository.api.baseUrl = validateServer(
+                savedServer is String ? savedServer : ApiConfig.baseUrl);
+          } on ApiException {
+            if (ApiConfig.allowInsecureApi) rethrow;
+            repository.api.baseUrl = ApiConfig.baseUrl;
+            await store.write(
+                jsonEncode({'token': token, 'server': repository.api.baseUrl}));
+          }
           repository.api.token = token;
           _schedule();
           try {

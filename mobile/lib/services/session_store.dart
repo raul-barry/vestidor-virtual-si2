@@ -21,8 +21,34 @@ class SecureSessionStore implements SessionStore {
 
 abstract class DeviceSyncCredentialStore {
   Future<Map<String, dynamic>> readAll();
-  Future<void> writeFor(int userId, int organizationId, Map<String, dynamic> credential);
+  Future<void> writeFor(
+      int userId, int organizationId, Map<String, dynamic> credential);
   Future<void> clear();
+}
+
+abstract class ClientPrivateCacheStore {
+  Future<Map<String, dynamic>?> read(String key);
+  Future<void> write(String key, Map<String, dynamic> value);
+}
+
+class SecureClientPrivateCacheStore implements ClientPrivateCacheStore {
+  static const _storage = FlutterSecureStorage();
+  String _key(String key) => 'fashion_store_private_cache_$key';
+
+  @override
+  Future<Map<String, dynamic>?> read(String key) async {
+    try {
+      final value = await _storage.read(key: _key(key));
+      if (value == null) return null;
+      return Map<String, dynamic>.from(jsonDecode(value) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> write(String key, Map<String, dynamic> value) =>
+      _storage.write(key: _key(key), value: jsonEncode(value));
 }
 
 class SecureDeviceSyncCredentialStore implements DeviceSyncCredentialStore {
@@ -34,14 +60,19 @@ class SecureDeviceSyncCredentialStore implements DeviceSyncCredentialStore {
       final value = await _storage.read(key: _key);
       if (value == null) return {};
       return Map<String, dynamic>.from(jsonDecode(value) as Map);
-    } catch (_) { return {}; }
+    } catch (_) {
+      return {};
+    }
   }
+
   @override
-  Future<void> writeFor(int userId, int organizationId, Map<String, dynamic> credential) async {
+  Future<void> writeFor(
+      int userId, int organizationId, Map<String, dynamic> credential) async {
     final values = await readAll();
     values['$organizationId:$userId'] = credential;
     await _storage.write(key: _key, value: jsonEncode(values));
   }
+
   @override
   Future<void> clear() => _storage.delete(key: _key);
 }

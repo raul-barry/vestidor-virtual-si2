@@ -131,8 +131,11 @@ class ClientRepository {
     }
   }
 
-  Future<Json> createStripeIntent(int orderId) =>
-      object('POST', '/api/payments/stripe/create-intent', {'id_pedido': orderId});
+  Future<Json> createStripeIntent(int orderId) => object(
+      'POST', '/api/payments/stripe/create-intent', {'id_pedido': orderId});
+
+  Future<Json> paymentStatus(int orderId) =>
+      object('GET', '/api/payments/$orderId/status');
 
   Future<Json> createQrPayment(int orderId) => object(
       'POST', '/api/payments/qr', {'id_pedido': orderId, 'metodo_pago': 'QR'});

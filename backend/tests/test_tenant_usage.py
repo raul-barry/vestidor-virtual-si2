@@ -31,7 +31,7 @@ def _headers(db, role_name: str, email: str, organization_id: int = 1) -> dict[s
         db.add(role)
         db.flush()
     user = Usuario(
-        id_organizacion=organization_id,
+        id_organizacion=None if role_name == "ADMINISTRADOR_PLATAFORMA" else organization_id,
         id_rol=role.id_rol,
         nombres="Métrica",
         apellidos="Test",

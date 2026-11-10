@@ -15,6 +15,11 @@ from app.models.talla import Talla
 from app.models.inventario import Inventario
 from app.models.sucursal import Sucursal
 from sqlalchemy import select
+from conftest import session_token
+from app.models.audit_log import AuditLog
+from app.models.organizacion import Organizacion
+from app.models.rol import Rol
+from app.models.usuario import Usuario
 
 
 def create_variant(db) -> int:
@@ -49,6 +54,24 @@ def register_and_login(client: TestClient, correo: str) -> dict[str, str]:
     login = client.post("/api/auth/login", json={"correo": correo, "password": "password-seguro"})
     assert login.status_code == 200
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+def staff_headers(db, *, organization_id: int = 1, role_name: str = "ADMINISTRADOR"):
+    role = db.scalar(select(Rol).where(Rol.nombre == role_name))
+    if role is None:
+        role = Rol(nombre=role_name, estado="ACTIVO")
+        db.add(role)
+        db.flush()
+    user = Usuario(
+        id_organizacion=organization_id, id_rol=role.id_rol,
+        nombres="Personal", apellidos="Prueba",
+        correo=f"{role_name.lower()}-{organization_id}@payments.test",
+        password_hash="unused", estado="ACTIVO",
+    )
+    db.add(user)
+    db.commit()
+    token = session_token(db, {"id_usuario": user.id_usuario, "rol": role_name})
+    return {"Authorization": f"Bearer {token}"}
 
 
 def create_order_for_client(db, client: TestClient, headers: dict[str, str]) -> int:
@@ -310,3 +333,115 @@ def test_authenticated_customer_smoke_routes_do_not_return_401(db) -> None:
     assert client.put("/api/body-profile", headers=headers, json={"consentimiento": True, "altura_cm": 170}).status_code == 200
     assert client.get("/api/body-profile", headers=headers).status_code == 200
     assert client.post("/api/cart/items", headers=headers, json={"id_variante": variant_id, "cantidad": 1}).status_code == 200
+
+
+def test_admin_can_approve_only_simulated_payment_once_and_audit_it(db, monkeypatch) -> None:
+    seed_roles(db)
+    db.commit()
+    monkeypatch.setattr(settings, "environment", "test")
+    monkeypatch.setattr(settings, "payment_simulation_mode", True)
+    client = TestClient(app)
+    customer = register_and_login(client, "admin-approved-sim@example.com")
+    order_id = create_order_for_client(db, client, customer)
+    created = client.post("/api/payments/qr", headers=customer,
+                          json={"id_pedido": order_id, "metodo_pago": "QR"})
+    payment_id = created.json()["payment"]["id_pago"]
+    staff = staff_headers(db)
+    inventory = db.scalar(select(Inventario))
+
+    approved = client.put(f"/api/payments/reconciliation/{payment_id}/simulate",
+                          headers=staff, json={"approved": True})
+    repeated = client.put(f"/api/payments/reconciliation/{payment_id}/simulate",
+                          headers=staff, json={"approved": True})
+    order = client.get(f"/api/orders/{order_id}", headers=customer)
+    db.refresh(inventory)
+    audit = db.scalar(select(AuditLog).where(
+        AuditLog.entidad == "Pago", AuditLog.entidad_id == str(payment_id),
+        AuditLog.accion == "PAGO_SIMULADO_APROBADO",
+    ))
+
+    assert approved.status_code == 200
+    assert approved.json()["estado"] == "PAGADO"
+    assert order.json()["estado"] == "CONFIRMADO"
+    assert inventory.stock_disponible == 8
+    assert inventory.stock_reservado == 0
+    assert repeated.status_code == 409
+    assert inventory.stock_disponible == 8
+    assert audit is not None and audit.usuario_id is not None
+
+
+def test_admin_rejection_releases_stock_without_marking_order_paid(db, monkeypatch) -> None:
+    seed_roles(db)
+    db.commit()
+    monkeypatch.setattr(settings, "environment", "test")
+    monkeypatch.setattr(settings, "payment_simulation_mode", True)
+    client = TestClient(app)
+    customer = register_and_login(client, "admin-rejected-sim@example.com")
+    order_id = create_order_for_client(db, client, customer)
+    created = client.post("/api/payments/qr", headers=customer,
+                          json={"id_pedido": order_id, "metodo_pago": "QR"})
+    payment_id = created.json()["payment"]["id_pago"]
+    staff = staff_headers(db)
+    inventory = db.scalar(select(Inventario))
+
+    rejected = client.put(f"/api/payments/reconciliation/{payment_id}/simulate",
+                          headers=staff, json={"approved": False})
+    order = client.get(f"/api/orders/{order_id}", headers=customer)
+    db.refresh(inventory)
+    audit = db.scalar(select(AuditLog).where(
+        AuditLog.entidad == "Pago", AuditLog.entidad_id == str(payment_id),
+        AuditLog.accion == "PAGO_SIMULADO_RECHAZADO",
+    ))
+
+    assert rejected.status_code == 200
+    assert rejected.json()["estado"] == "FALLIDO"
+    assert order.json()["estado"] == "PENDIENTE"
+    assert inventory.stock_disponible == 10
+    assert inventory.stock_reservado == 0
+    assert audit is not None and audit.usuario_id is not None
+
+
+def test_admin_simulation_rejects_real_and_foreign_tenant_payments(db, monkeypatch) -> None:
+    seed_roles(db)
+    db.commit()
+    monkeypatch.setattr(settings, "environment", "test")
+    monkeypatch.setattr(settings, "payment_simulation_mode", True)
+    client = TestClient(app)
+    customer = register_and_login(client, "admin-real-payment@example.com")
+    order_id = create_order_for_client(db, client, customer)
+    real = client.post("/api/payments", headers=customer,
+                       json={"id_pedido": order_id, "metodo_pago": "TARJETA"})
+    staff = staff_headers(db)
+    real_attempt = client.put(
+        f"/api/payments/reconciliation/{real.json()['id_pago']}/simulate",
+        headers=staff, json={"approved": True},
+    )
+
+    db.info.pop("organization_id", None)
+    db.add(Organizacion(id_organizacion=2, nombre="Otra Empresa",
+                        slug="otra-empresa", estado="ACTIVA"))
+    db.commit()
+    foreign_staff = staff_headers(db, organization_id=2)
+    foreign_attempt = client.put(
+        f"/api/payments/reconciliation/{real.json()['id_pago']}/simulate",
+        headers=foreign_staff, json={"approved": True},
+    )
+
+    assert real_attempt.status_code == 409
+    assert foreign_attempt.status_code == 404
+
+
+def test_admin_simulation_is_disabled_outside_test_mode(db, monkeypatch) -> None:
+    seed_roles(db)
+    db.commit()
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "payment_simulation_mode", False)
+    client = TestClient(app)
+    customer = register_and_login(client, "disabled-simulation@example.com")
+    order_id = create_order_for_client(db, client, customer)
+    staff = staff_headers(db)
+
+    response = client.put("/api/payments/reconciliation/1/simulate",
+                          headers=staff, json={"approved": True})
+
+    assert response.status_code == 403

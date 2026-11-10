@@ -18,6 +18,7 @@ from app.schemas.payment import (
     CreateRefundRequest,
     RefundEvidenceRequest,
     ExchangeChargeRequest,
+    SimulatePaymentRequest,
 )
 from app.models.payment_refund import PaymentRefund
 from app.models.payment_adjustment import PaymentAdjustment
@@ -35,6 +36,7 @@ from app.services.payment_service import PaymentService
 from app.services.payment_refund_service import PaymentRefundService
 from app.services.payment_adjustment_service import PaymentAdjustmentService
 from app.services.stock_sale_service import hold_order_stock, release_order_stock
+from app.services.audit_service import AuditService
 
 payment_router = APIRouter(prefix="/payments", tags=["Pagos"])
 
@@ -467,3 +469,49 @@ def reject_payment(
     if not payment.simulated:
         raise HTTPException(409, "Solo se puede simular el rechazo de un pago marcado como simulado.")
     return service.reject_payment(id_pago, id_cliente)
+
+
+@payment_router.put("/reconciliation/{id_pago}/simulate", response_model=PaymentResponse)
+def reconcile_simulated_payment(
+    id_pago: int,
+    request: SimulatePaymentRequest,
+    db: Session = Depends(get_db),
+    actor: Usuario = Depends(require_roles("ADMINISTRADOR")),
+) -> PaymentResponse:
+    if settings.environment not in {"development", "test"} or not settings.payment_simulation_mode:
+        raise HTTPException(403, "La simulación de pagos está deshabilitada.")
+    if actor.id_organizacion is None:
+        raise HTTPException(403, "Se requiere contexto de empresa.")
+    payment = db.scalar(
+        select(Pago).join(Pedido, Pedido.id_pedido == Pago.id_pedido)
+        .join(Cliente, Cliente.id_cliente == Pedido.id_cliente)
+        .join(Usuario, Usuario.id_usuario == Cliente.id_usuario)
+        .where(Pago.id_pago == id_pago, Usuario.id_organizacion == actor.id_organizacion)
+        .with_for_update()
+    )
+    if payment is None:
+        raise HTTPException(404, "Pago no encontrado.")
+    if not payment.simulated:
+        raise HTTPException(409, "Solo se pueden resolver pagos simulados.")
+
+    service = PaymentService(db)
+    order_id = payment.id_pedido
+    try:
+        result = (
+            service.approve_payment(id_pago, commit=False)
+            if request.approved
+            else service.reject_payment(id_pago, commit=False)
+        )
+        AuditService.record(
+            db, organization_id=actor.id_organizacion, actor_id=actor.id_usuario,
+            actor_role=actor.rol.nombre,
+            action="PAGO_SIMULADO_APROBADO" if request.approved else "PAGO_SIMULADO_RECHAZADO",
+            entity="Pago", entity_id=id_pago,
+            details={"payment_id": id_pago, "order_id": order_id,
+                     "simulated": True, "state": result.estado},
+        )
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise

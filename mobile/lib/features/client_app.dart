@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart'
+    show FailureCode, StripeException;
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,13 +18,23 @@ import '../services/catalog_offline_store.dart';
 import '../services/reservation_offline_store.dart';
 import '../services/reservation_background_sync.dart';
 import '../services/stripe_payment_sheet_service.dart';
+import '../services/offline_sync_protocol.dart';
 
 class ClientHome extends StatefulWidget {
   const ClientHome(
-      {super.key, this.repository, this.sessionStore, this.catalogStore});
+      {super.key,
+      this.repository,
+      this.sessionStore,
+      this.catalogStore,
+      this.privateCacheStore,
+      this.reservationStore,
+      this.stripePaymentSheet});
   final ClientRepository? repository;
   final SessionStore? sessionStore;
   final CatalogOfflineStore? catalogStore;
+  final ClientPrivateCacheStore? privateCacheStore;
+  final ReservationOfflineStore? reservationStore;
+  final StripePaymentSheetService? stripePaymentSheet;
   @override
   State<ClientHome> createState() => _ClientHomeState();
 }
@@ -149,9 +161,11 @@ class _ClientHomeState extends State<ClientHome> {
   bool _wasSignedIn = false;
   SharedPreferences? _localStore;
   late final CatalogOfflineStore _catalogStore;
-  final ReservationOfflineStore _reservationStore = ReservationOfflineStore();
-  final StripePaymentSheetService _stripePaymentSheet =
-      StripePaymentSheetService();
+  late final ClientPrivateCacheStore _privateCacheStore;
+  late final ReservationOfflineStore _reservationStore =
+      widget.reservationStore ?? ReservationOfflineStore();
+  late final StripePaymentSheetService _stripePaymentSheet =
+      widget.stripePaymentSheet ?? StripePaymentSheetService();
   final SecureDeviceSyncCredentialStore _deviceCredentialStore =
       SecureDeviceSyncCredentialStore();
   Map<String, dynamic> _deviceCredentials = {};
@@ -161,6 +175,7 @@ class _ClientHomeState extends State<ClientHome> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   bool _catalogRefreshInProgress = false;
   bool _outboxSyncInProgress = false;
+  bool _restoring = true;
   bool _salesOffline = false;
   bool _networkAvailable = true;
   DateTime? _lastInternetProbeAt;
@@ -176,6 +191,8 @@ class _ClientHomeState extends State<ClientHome> {
     super.initState();
     repository = widget.repository ?? ClientRepository(ApiClient());
     _catalogStore = widget.catalogStore ?? CatalogOfflineStore();
+    _privateCacheStore =
+        widget.privateCacheStore ?? SecureClientPrivateCacheStore();
     server = TextEditingController(text: repository.api.baseUrl);
     _resetDemoCard();
     session = ClientSession(
@@ -191,7 +208,9 @@ class _ClientHomeState extends State<ClientHome> {
         _lastConnectivitySyncAt = null;
       }
       if (mounted) setState(() {});
-      if (_networkAvailable) unawaited(_handleConnectivityAvailable());
+      if (_networkAvailable && !_restoring) {
+        unawaited(_handleConnectivityAvailable());
+      }
     });
     restore();
   }
@@ -199,16 +218,20 @@ class _ClientHomeState extends State<ClientHome> {
   Future<void> restore() async {
     await session.restore();
     _deviceCredentials = await _deviceCredentialStore.readAll();
-    await _scheduleBackgroundSyncIfPending();
     await _restoreLocalPreferences();
     if (!mounted) return;
     await _refreshOutboxState();
     server.text = repository.api.baseUrl;
-    if (session.signedIn) await run(load);
+    if (session.signedIn) {
+      await run(load);
+      await _refreshOutboxState();
+    }
+    unawaited(_scheduleBackgroundSyncIfPending());
     if (session.signedIn) {
       await _catalogStore.recoverSending('org:${session.organizationId}');
     }
     await _syncOutbox();
+    _restoring = false;
   }
 
   Future<void> _restoreLocalPreferences() async {
@@ -329,7 +352,7 @@ class _ClientHomeState extends State<ClientHome> {
             'ERROR_REINTENTABLE',
             'ENVIANDO'
           }.contains(item['status']))) {
-        await ReservationBackgroundSync.schedule();
+        unawaited(ReservationBackgroundSync.schedule());
         return;
       }
     }
@@ -347,9 +370,11 @@ class _ClientHomeState extends State<ClientHome> {
     final probe = () async {
       try {
         final response = await repository.api
-            .request('GET', '/api/health')
+            .request('GET', '/health')
             .timeout(const Duration(seconds: 5));
-        return response is Map && response['status'] == 'ok';
+        // A successful HTTP response is enough to prove reachability; health
+        // endpoints may return different JSON shapes across backend versions.
+        return response is Map;
       } catch (_) {
         return false;
       }
@@ -364,6 +389,7 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Future<void> _handleConnectivityAvailable() async {
+    if (!session.signedIn && _deviceCredentials.isEmpty) return;
     final now = DateTime.now();
     if (_lastConnectivitySyncAt != null &&
         now.difference(_lastConnectivitySyncAt!) <
@@ -378,6 +404,7 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Future<void> _syncOutbox() async {
+    if (!session.signedIn && _deviceCredentials.isEmpty) return;
     if (_outboxSyncInProgress) return;
     _outboxSyncInProgress = true;
     final originalToken = repository.api.token;
@@ -421,7 +448,7 @@ class _ClientHomeState extends State<ClientHome> {
         }
       }
     } finally {
-      repository.api.token = originalToken;
+      repository.api.token = session.signedIn ? originalToken : null;
       repository.api.baseUrl = originalServer;
       _outboxSyncInProgress = false;
       await _refreshOutboxState();
@@ -462,20 +489,18 @@ class _ClientHomeState extends State<ClientHome> {
       required String server}) async {
     repository.api.baseUrl = ClientSession.validateServer(server);
     repository.api.token = token;
-    await _catalogStore.recoverSending(scope);
-    final operations =
-        await _catalogStore.claimPending(scope, ownerUserId: userId);
+    await _catalogStore.recoverSending(scope, ownerUserId: userId);
+    final operations = await _catalogStore.claimPending(
+      scope,
+      ownerUserId: userId,
+      operationTypes: clientOutboxOperationTypes,
+    );
     if (operations.isEmpty) return;
     final allowed = operations.where((operation) {
       final payload = operation['payload'] as Map?;
-      final type = operation['operation_type'] as String? ?? '';
-      final reservation = type.startsWith('reserva.');
-      final sale = type == 'venta.crear';
-      final exchange = type.startsWith('cambio.');
       return operation['client_id'] == clientId &&
           operation['tenant_scope'] == scope &&
-          (!(reservation || sale || exchange) ||
-              payload?['id_usuario'] == userId);
+          payload?['id_usuario'] == userId;
     }).toList();
     for (final operation
         in operations.where((operation) => !allowed.contains(operation))) {
@@ -487,8 +512,10 @@ class _ClientHomeState extends State<ClientHome> {
     }
     if (allowed.isEmpty) return;
     try {
-      final response = Map<String, dynamic>.from(await repository.api
-          .request('POST', '/api/sync/batch', {'operations': allowed}));
+      final response = Map<String, dynamic>.from(await repository.api.request(
+          'POST',
+          '/api/sync/batch',
+          {'operations': OfflineSyncProtocol.toWireOperations(allowed)}));
       await _applyOutboxResults(
           allowed, response['results'] as List? ?? const []);
       await _catalogStore.setLastSync(scope);
@@ -499,25 +526,17 @@ class _ClientHomeState extends State<ClientHome> {
         await _catalogStore.setLastSync(scope);
       } else {
         final retryable = error.status == 0 || error.status >= 500;
+        final status = retryable ? 'ERROR_REINTENTABLE' : 'RECHAZADA';
         for (final operation in allowed) {
           await _catalogStore.updateOutbox(
-              operation['operation_uuid'] as String,
-              retryable ? 'ERROR_REINTENTABLE' : 'RECHAZADA',
+              operation['operation_uuid'] as String, status,
               category: retryable
                   ? 'TEMPORAL'
                   : error.status == 401 || error.status == 403
                       ? 'NO_AUTORIZADA'
                       : 'DATOS_INVALIDOS',
               message: error.message);
-          if (operation['operation_type'] == 'venta.crear') {
-            await _reservationStore.reconcileSale(operation, null,
-                retryable ? 'ERROR_REINTENTABLE' : 'RECHAZADA', error.message);
-          }
-          if ((operation['operation_type'] as String? ?? '')
-              .startsWith('cambio.')) {
-            await _reservationStore.reconcileExchange(operation, null,
-                retryable ? 'ERROR_REINTENTABLE' : 'RECHAZADA', error.message);
-          }
+          await _reconcileOutboxOperation(operation, status, error.message);
         }
       }
     } catch (error) {
@@ -525,16 +544,26 @@ class _ClientHomeState extends State<ClientHome> {
         await _catalogStore.updateOutbox(
             operation['operation_uuid'] as String, 'ERROR_REINTENTABLE',
             category: 'TEMPORAL', message: '$error');
-        if (operation['operation_type'] == 'venta.crear') {
-          await _reservationStore.reconcileSale(
-              operation, null, 'ERROR_REINTENTABLE', '$error');
-        }
-        if ((operation['operation_type'] as String? ?? '')
-            .startsWith('cambio.')) {
-          await _reservationStore.reconcileExchange(
-              operation, null, 'ERROR_REINTENTABLE', '$error');
-        }
+        await _reconcileOutboxOperation(
+            operation, 'ERROR_REINTENTABLE', '$error');
       }
+    }
+  }
+
+  Future<void> _reconcileOutboxOperation(
+      Json operation, String status, String? message,
+      {Json? result}) async {
+    final type = operation['operation_type'] as String? ?? '';
+    if (type.startsWith('reserva.')) {
+      await _reservationStore.reconcile(operation, result, status, message);
+    } else if (type == 'venta.crear') {
+      await _reservationStore.reconcileSale(operation, result, status, message);
+    } else if (type.startsWith('cambio.')) {
+      await _reservationStore.reconcileExchange(
+          operation, result, status, message);
+    } else if (type == 'pago.solicitar') {
+      await _reservationStore.reconcilePayment(
+          operation, result, status, message);
     }
   }
 
@@ -549,52 +578,23 @@ class _ClientHomeState extends State<ClientHome> {
       final status = result?['status'];
       final validStatus =
           {'SINCRONIZADA', 'RECHAZADA', 'ERROR_REINTENTABLE'}.contains(status);
-      await _catalogStore.updateOutbox(
-          id, validStatus ? status as String : 'ERROR_REINTENTABLE',
-          category: result?['category'] as String?,
+      final savedStatus = validStatus ? status as String : 'ERROR_REINTENTABLE';
+      await _catalogStore.updateOutbox(id, savedStatus,
+          category: result?['category'] as String? ??
+              (result == null ? 'TEMPORAL' : null),
           message: result?['message'] as String? ??
               (result == null
                   ? 'El servidor omitió el resultado de la operación.'
                   : null));
-      if ((operation['operation_type'] as String? ?? '')
-          .startsWith('reserva.')) {
-        await _reservationStore.reconcile(
-          operation,
-          result?['result'] is Map
-              ? Map<String, dynamic>.from(result!['result'] as Map)
-              : null,
-          validStatus ? status as String : 'ERROR_REINTENTABLE',
-          result?['message'] as String?,
-        );
-      } else if (operation['operation_type'] == 'venta.crear') {
-        await _reservationStore.reconcileSale(
-          operation,
-          result?['result'] is Map
-              ? Map<String, dynamic>.from(result!['result'] as Map)
-              : null,
-          validStatus ? status as String : 'ERROR_REINTENTABLE',
-          result?['message'] as String?,
-        );
-      } else if ((operation['operation_type'] as String? ?? '')
-          .startsWith('cambio.')) {
-        await _reservationStore.reconcileExchange(
-          operation,
-          result?['result'] is Map
-              ? Map<String, dynamic>.from(result!['result'] as Map)
-              : null,
-          validStatus ? status as String : 'ERROR_REINTENTABLE',
-          result?['message'] as String?,
-        );
-      } else if (operation['operation_type'] == 'pago.solicitar') {
-        await _reservationStore.reconcilePayment(
-          operation,
-          result?['result'] is Map
-              ? Map<String, dynamic>.from(result!['result'] as Map)
-              : null,
-          validStatus ? status as String : 'ERROR_REINTENTABLE',
-          result?['message'] as String?,
-        );
-      }
+      await _reconcileOutboxOperation(
+        operation,
+        savedStatus,
+        result?['message'] as String? ??
+            (result == null ? 'El servidor omitió el resultado.' : null),
+        result: result?['result'] is Map
+            ? Map<String, dynamic>.from(result!['result'] as Map)
+            : null,
+      );
     }
   }
 
@@ -744,8 +744,7 @@ class _ClientHomeState extends State<ClientHome> {
       if (mounted) {
         setState(() {
           failed = true;
-          if (page == 'Recomendaciones')
-            assistantStatus = 'Error de conexión';
+          if (page == 'Recomendaciones') assistantStatus = 'Error de conexión';
           message = e is ApiException
               ? e.message
               : 'No se pudo completar la operación. Intenta nuevamente.';
@@ -788,29 +787,70 @@ class _ClientHomeState extends State<ClientHome> {
         }
       case 'Carrito':
         try {
-          cart = await repository.cart();
-          _salesOffline = false;
+          final remoteCart = await repository.cart();
           final scope = _salesScope;
           final owner = session.userId;
+          final localItems = scope == null || owner == null
+              ? <Json>[]
+              : await _reservationStore.read(_salesCartKey(scope, owner));
+          final remoteItems =
+              List<Json>.from(remoteCart['items'] as List? ?? const []);
+          final remoteVariants =
+              remoteItems.map((item) => item['id_variante']).toSet();
+          final pendingOffline = localItems
+              .where((item) => item['pending_offline'] == true)
+              .toList();
+          final uncertainLocal = localItems
+              .where((item) => item['server_status_unknown'] == true)
+              .where((item) => !remoteVariants.contains(item['id_variante']))
+              .map((item) => {
+                    ...item,
+                    'server_status_unknown': false,
+                    'pending_offline': true,
+                  });
+          final retainedByVariant = <dynamic, Json>{
+            for (final item in pendingOffline) item['id_variante']: item,
+            for (final item in uncertainLocal) item['id_variante']: item,
+          };
+          final retainedLocal = retainedByVariant.values.toList();
+          if (retainedLocal.isEmpty) {
+            cart = remoteCart;
+            _salesOffline = false;
+          } else {
+            final retainedVariants =
+                retainedLocal.map((item) => item['id_variante']).toSet();
+            cart = _cartFromItems([
+              ...remoteItems.where(
+                  (item) => !retainedVariants.contains(item['id_variante'])),
+              ...retainedLocal,
+            ]);
+            _salesOffline = true;
+          }
           if (scope != null && owner != null)
-            await _reservationStore.save(
-                _salesCartKey(scope, owner),
-                List<Map<String, dynamic>>.from(
-                    cart['items'] as List? ?? const []));
+            await _reservationStore.save(_salesCartKey(scope, owner),
+                List<Json>.from(cart['items'] as List? ?? const []));
         } catch (_) {
           final scope = _salesScope;
           final owner = session.userId;
           if (scope == null || owner == null) rethrow;
           final items =
               await _reservationStore.read(_salesCartKey(scope, owner));
-          if (items.isEmpty) rethrow;
+          if (items.isEmpty) {
+            _salesOffline = true;
+            cart = _cartFromItems(const []);
+            break;
+          }
           _salesOffline = true;
           cart = _cartFromItems(items);
         }
       case 'Pedidos':
         final scope = _salesScope;
         final owner = session.userId;
-        final localOrders = scope == null || owner == null
+        if (owner == null) {
+          throw ApiException(
+              401, 'Inicia sesión nuevamente para consultar tu perfil.');
+        }
+        final localOrders = scope == null
             ? <Json>[]
             : await _reservationStore.orders(scope, owner);
         try {
@@ -823,7 +863,6 @@ class _ClientHomeState extends State<ClientHome> {
             ...remote
           ];
         } catch (_) {
-          if (localOrders.isEmpty) rethrow;
           rows = localOrders;
           _salesOffline = true;
         }
@@ -844,10 +883,32 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Cambios':
         await _loadExchanges();
       case 'Recomendaciones':
-        personalizedRows = await _loadPersonalizedRecommendations();
+        try {
+          personalizedRows = await _loadPersonalizedRecommendations();
+        } catch (_) {
+          personalizedRows = [];
+          message = 'Las recomendaciones personalizadas requieren conexión.';
+        }
       case 'Vestidor':
-        rows = await repository.fittingVariants();
-        fittingAvailability = await repository.reservationAvailability();
+        try {
+          rows = await repository.fittingVariants();
+          fittingAvailability = await repository.reservationAvailability();
+        } catch (_) {
+          final cached = await _offlineCatalog(const {});
+          rows = cached
+              .expand((item) => (item['variantes'] as List? ?? const []))
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+          final scope = _salesScope;
+          final owner = session.userId;
+          fittingAvailability = scope == null || owner == null
+              ? []
+              : await _reservationStore
+                  .read(_reservationAvailabilityKey(scope, owner));
+          message =
+              'Vista previa disponible sin conexión; la prueba virtual requiere Internet.';
+        }
         _filterFittingAvailability();
         if (tryOnProductId == null &&
             !rows.any((r) => r['id_variante'] == variantId)) {
@@ -855,16 +916,40 @@ class _ClientHomeState extends State<ClientHome> {
           fitting = null;
         }
       case 'Perfil':
-        final profile = await repository.profile();
+        final owner = session.userId;
+        if (owner == null) {
+          throw ApiException(401, 'Inicia sesión para consultar tu perfil.');
+        }
+        final profileKey = _privateCacheKey('profile', owner);
+        final loyaltyKey = _privateCacheKey('loyalty', owner);
+        Map<String, dynamic>? profile;
+        if (await _hasInternetAccess()) {
+          try {
+            profile = await repository.profile();
+            await _privateCacheStore.write(profileKey, profile);
+            try {
+              loyaltySnapshot = await repository.loyalty();
+              await _privateCacheStore.write(loyaltyKey, loyaltySnapshot!);
+            } catch (_) {
+              loyaltySnapshot = await _privateCacheStore.read(loyaltyKey);
+            }
+          } catch (_) {
+            profile = await _privateCacheStore.read(profileKey);
+            loyaltySnapshot = await _privateCacheStore.read(loyaltyKey);
+          }
+        } else {
+          profile = await _privateCacheStore.read(profileKey);
+          loyaltySnapshot = await _privateCacheStore.read(loyaltyKey);
+        }
         if (!mounted) return;
-        firstName.text = profile['nombres'];
-        lastName.text = profile['apellidos'];
-        phone.text = profile['telefono'] ?? '';
-        profileEmail = profile['correo'];
-        try {
-          loyaltySnapshot = await repository.loyalty();
-        } catch (_) {
-          loyaltySnapshot = null;
+        firstName.text = profile?['nombres']?.toString() ?? '';
+        lastName.text = profile?['apellidos']?.toString() ?? '';
+        phone.text = profile?['telefono']?.toString() ?? '';
+        profileEmail = profile?['correo']?.toString() ?? '';
+        if (profile == null) {
+          message = 'Perfil sin conexión: se mostrará cuando vuelva Internet.';
+        } else if (!await _hasInternetAccess()) {
+          message = 'Mostrando el perfil guardado en este dispositivo.';
         }
       case 'Detalle':
         if (product != null) await detail(product!);
@@ -875,6 +960,8 @@ class _ClientHomeState extends State<ClientHome> {
       'reservations:$scope:$userId';
   String _reservationAvailabilityKey(String scope, int userId) =>
       'availability:$scope:$userId';
+  String _privateCacheKey(String section, int userId) =>
+      '$section:org:${session.organizationId}:user:$userId';
   String? get _salesScope =>
       session.organizationId == null ? null : 'org:${session.organizationId}';
   String _salesCartKey(String scope, int userId) => 'sales:cart:$scope:$userId';
@@ -1094,8 +1181,7 @@ class _ClientHomeState extends State<ClientHome> {
       await _reservationStore.saveExchanges(
           'org:$organizationId', owner, exchangeRows);
       await ReservationBackgroundSync.schedule();
-      message =
-          'Solicitud guardada offline. Se enviará al recuperar conexión.';
+      message = 'Solicitud guardada offline. Se enviará al recuperar conexión.';
       if (await _hasInternetAccess()) await _syncOutbox();
     }
     await _refreshOutboxState();
@@ -1338,7 +1424,8 @@ class _ClientHomeState extends State<ClientHome> {
   }
 
   Future<void> detail(Json row) async {
-    if (offlineMode) {
+    if (offlineMode || !await _hasInternetAccess()) {
+      offlineMode = true;
       product = {...row, 'nombre_producto': row['nombre']};
       final scope = _salesScope;
       final owner = session.userId;
@@ -1381,34 +1468,87 @@ class _ClientHomeState extends State<ClientHome> {
   Future<void> add(int id, [int? count]) async {
     if (!session.signedIn) {
       throw ApiException(
-          401, 'Inicia sesión en esta tienda para usar el carrito.');
+          401, 'Inicia sesi\u00f3n en esta tienda para usar el carrito.');
     }
-    if (!await _hasInternetAccess()) {
-      await _addToLocalCart(id, count ?? quantity);
-      return;
-    }
-    await repository.addItem(id, count ?? quantity);
-    cart = await repository.cart();
-    final scope = _salesScope;
-    if (scope != null && session.userId != null) {
-      await _reservationStore.save(_salesCartKey(scope, session.userId!),
-          List<Json>.from(cart['items'] as List));
-    }
-    message = 'Prenda agregada al carrito';
-  }
-
-  Future<void> _addToLocalCart(int id, int count) async {
     final scope = _salesScope;
     final owner = session.userId;
-    if (scope == null || owner == null || product == null)
+    final connected = await _hasInternetAccess();
+    final cartKey =
+        scope == null || owner == null ? null : _salesCartKey(scope, owner);
+    final stockKey = scope == null || owner == null
+        ? null
+        : _reservationAvailabilityKey(scope, owner);
+    final previousCart =
+        cartKey == null ? <Json>[] : await _reservationStore.read(cartKey);
+    final previousStock =
+        stockKey == null ? <Json>[] : await _reservationStore.read(stockKey);
+    await _addToLocalCart(id, count ?? quantity, offline: !connected);
+    if (!connected) return;
+
+    var serverAcceptedAdd = false;
+    try {
+      await repository.addItem(id, count ?? quantity);
+      serverAcceptedAdd = true;
+      cart = await repository.cart();
+      _salesOffline = false;
+      if (cartKey != null) {
+        await _reservationStore.save(
+            cartKey, List<Json>.from(cart['items'] as List? ?? const []));
+      }
+      message = 'Prenda agregada al carrito';
+    } on ApiException catch (error) {
+      if (error.status != 0) {
+        if (cartKey != null)
+          await _reservationStore.save(cartKey, previousCart);
+        if (stockKey != null)
+          await _reservationStore.save(stockKey, previousStock);
+        cart = _cartFromItems(previousCart);
+        rethrow;
+      }
+      if (cartKey != null && !serverAcceptedAdd) {
+        final localItems = await _reservationStore.read(cartKey);
+        for (final item
+            in localItems.where((line) => line['id_variante'] == id)) {
+          item['server_status_unknown'] = true;
+        }
+        await _reservationStore.save(cartKey, localItems);
+      }
+      _salesOffline = true;
+      message =
+          'Prenda agregada al carrito local. Se validar\u00e1 al recuperar conexi\u00f3n.';
+    } catch (_) {
+      if (cartKey != null && !serverAcceptedAdd) {
+        final localItems = await _reservationStore.read(cartKey);
+        for (final item
+            in localItems.where((line) => line['id_variante'] == id)) {
+          item['server_status_unknown'] = true;
+        }
+        await _reservationStore.save(cartKey, localItems);
+      }
+      _salesOffline = true;
+      message =
+          'Prenda agregada al carrito local. Se validar\u00e1 al recuperar conexi\u00f3n.';
+    }
+  }
+
+  Future<void> _addToLocalCart(int id, int count,
+      {required bool offline}) async {
+    final scope = _salesScope;
+    final owner = session.userId;
+    if (scope == null || owner == null) {
       throw ApiException(
           401, 'La venta offline requiere una sesión de cliente.');
-    final selected = (product!['variantes'] as List? ?? const [])
+    }
+    final selected = (product?['variantes'] as List? ?? const [])
         .where((value) => value['id_variante'] == id)
         .firstOrNull;
-    if (selected == null)
+    final source = selected == null
+        ? rows.where((row) => row['id_variante'] == id).firstOrNull
+        : null;
+    if (selected == null && source == null) {
       throw ApiException(
           0, 'La variante no está disponible en el catálogo guardado.');
+    }
     final cacheKey = _reservationAvailabilityKey(scope, owner);
     final cachedStock = await _reservationStore.read(cacheKey);
     final allocations = <Json>[];
@@ -1432,21 +1572,30 @@ class _ClientHomeState extends State<ClientHome> {
     final items = await _reservationStore.read(_salesCartKey(scope, owner));
     final existing =
         items.where((item) => item['id_variante'] == id).firstOrNull;
-    final price = product!['precio_base'] ?? '0.00';
+    final price = product?['precio_base'] ??
+        source?['precio_base'] ??
+        source?['precio'] ??
+        '0.00';
     if (existing == null) {
       items.add({
         'id_detalle': -DateTime.now().microsecondsSinceEpoch,
         'id_variante': id,
         'client_line_id': 'variant-$id',
-        'producto': product!['nombre_producto'] ?? product!['nombre'],
-        'talla': selected['talla'],
-        'color': selected['color'],
+        'producto': product?['nombre_producto'] ??
+            product?['nombre'] ??
+            source?['nombre'] ??
+            'Prenda',
+        'talla': selected?['talla'] ?? source?['talla'],
+        'color': selected?['color'] ?? source?['color'],
+        'imagen_url': product?['imagen_url'] ?? source?['imagen_url'],
         'cantidad': count,
         'precio_unitario': '$price',
         'offline_allocations': allocations,
+        'pending_offline': offline,
       });
     } else {
       existing['cantidad'] = (existing['cantidad'] as int) + count;
+      if (offline) existing['pending_offline'] = true;
       existing['offline_allocations'] = [
         ...(existing['offline_allocations'] as List? ?? const []),
         ...allocations
@@ -1455,7 +1604,7 @@ class _ClientHomeState extends State<ClientHome> {
     await _reservationStore.save(cacheKey, cachedStock);
     await _reservationStore.save(_salesCartKey(scope, owner), items);
     cart = _cartFromItems(items);
-    _salesOffline = true;
+    _salesOffline = offline;
     message = remaining == 0
         ? 'Producto agregado al carrito local.'
         : 'Producto agregado con disponibilidad provisional; el servidor confirmará las existencias.';
@@ -1624,8 +1773,7 @@ class _ClientHomeState extends State<ClientHome> {
   Future<void> generateTryOn() async {
     await run(() async {
       if (tryOnPhoto == null || tryOnProductId == null || variantId == null) {
-        throw ApiException(
-            0, 'Selecciona una prenda y una fotografía válida.');
+        throw ApiException(0, 'Selecciona una prenda y una fotografía válida.');
       }
 
       setState(() => message = '1/4 · Entré al probador virtual.');
@@ -1720,6 +1868,7 @@ class _ClientHomeState extends State<ClientHome> {
       message =
           'Pedido #${order['id_pedido']} creado. Puedes retomar el pago desde tus pedidos.';
       await openOrder(order);
+      if (paymentMethod == 'TARJETA') await _prepareSelectedPayment();
     });
   }
 
@@ -1749,6 +1898,23 @@ class _ClientHomeState extends State<ClientHome> {
                 'offline_allocations': item['offline_allocations'],
             })
         .toList();
+    final serverPayload = <String, dynamic>{
+      'id_usuario': userId,
+      'lineas': linePayload
+          .map((line) => {
+                'client_line_id': line['client_line_id'],
+                'id_variante': line['id_variante'],
+                'cantidad': line['cantidad'],
+              })
+          .toList(),
+      'metodo_pago': paymentMethod,
+      'datos_pago': {
+        if (cash != null) 'importe_recibido': cash.toStringAsFixed(2),
+        if (paymentMethod == 'TARJETA')
+          'resultado_local': 'PENDIENTE_CONFIRMACION_SERVIDOR',
+        if (paymentMethod == 'QR') 'verificacion': 'PENDIENTE',
+      },
+    };
     final operationId = await _catalogStore.enqueueOperation(
       tenantScope: scope,
       ownerUserId: userId,
@@ -1764,6 +1930,7 @@ class _ClientHomeState extends State<ClientHome> {
           if (paymentMethod == 'QR') 'verificacion': 'PENDIENTE',
         },
       },
+      syncPayload: serverPayload,
       clientId: outboxClientId,
     );
     final orders = await _reservationStore.orders(scope, userId);
@@ -1801,94 +1968,131 @@ class _ClientHomeState extends State<ClientHome> {
     if (await _hasInternetAccess()) await _syncOutbox();
   }
 
-  Future<void> pay() async {
-    await run(() async {
-      final order = selectedOrder!;
-      final orderId = order['id_pedido'];
-      if (orderId is! int) {
-        message = 'Comprobante provisional. La venta y su método de pago '
-            'se sincronizarán al recuperar conexión; el cobro aún no está confirmado.';
-        return;
+  Future<void> pay() => run(_prepareSelectedPayment);
+
+  Future<void> _prepareSelectedPayment() async {
+    final order = selectedOrder!;
+    final orderId = order['id_pedido'];
+    if (orderId is! int) {
+      message = 'Comprobante provisional. La venta y su método de pago '
+          'se sincronizarán al recuperar conexión; el cobro aún no está confirmado.';
+      return;
+    }
+    if (!await _hasInternetAccess()) {
+      final scope = _salesScope;
+      final userId = session.userId;
+      if (scope == null || userId == null) {
+        throw ApiException(
+            401, 'Inicia sesión para guardar la solicitud de pago.');
       }
-      if (!await _hasInternetAccess()) {
-        final scope = _salesScope;
-        final userId = session.userId;
-        if (scope == null || userId == null) {
-          throw ApiException(401, 'Inicia sesión para guardar la solicitud de pago.');
-        }
-        final received = paymentMethod == 'EFECTIVO'
-            ? double.tryParse(cashReceived.text.trim())
-            : null;
-        if (paymentMethod == 'EFECTIVO' && received == null) {
-          throw ApiException(0, 'Registra el importe recibido en efectivo.');
-        }
-        final operationId = await _catalogStore.enqueueOperation(
-          tenantScope: scope,
-          ownerUserId: userId,
-          operationType: 'pago.solicitar',
-          clientId: outboxClientId,
-          payload: {
-            'id_usuario': userId,
-            'id_pedido': orderId,
-            'metodo_pago': paymentMethod,
-            'datos_pago': {
-              if (received != null)
-                'importe_recibido': received.toStringAsFixed(2),
-            },
+      final received = paymentMethod == 'EFECTIVO'
+          ? double.tryParse(cashReceived.text.trim())
+          : null;
+      if (paymentMethod == 'EFECTIVO' && received == null) {
+        throw ApiException(0, 'Registra el importe recibido en efectivo.');
+      }
+      final operationId = await _catalogStore.enqueueOperation(
+        tenantScope: scope,
+        ownerUserId: userId,
+        operationType: 'pago.solicitar',
+        clientId: outboxClientId,
+        payload: {
+          'id_usuario': userId,
+          'id_pedido': orderId,
+          'metodo_pago': paymentMethod,
+          'datos_pago': {
+            if (received != null)
+              'importe_recibido': received.toStringAsFixed(2),
           },
-        );
-        await ReservationBackgroundSync.schedule();
-        message = 'Solicitud provisional guardada ($operationId). '
-            'El banco todavía no ha autorizado el pago.';
-        await _refreshOutboxState();
-        return;
+        },
+      );
+      await ReservationBackgroundSync.schedule();
+      message = 'Solicitud provisional guardada ($operationId). '
+          'El banco todavía no ha autorizado el pago.';
+      await _refreshOutboxState();
+      return;
+    }
+    if (!mounted) return;
+    setState(() => message = 'Preparando pago...');
+    if (paymentMethod == 'TARJETA') {
+      final intent = await repository.createStripeIntent(orderId);
+      final payment = Map<String, dynamic>.from(intent['payment'] as Map);
+      paymentInfo = {...payment, 'simulation': intent['simulation'] == true};
+      if (intent['simulation'] == true && !ApiConfig.paymentDemo) {
+        throw ApiException(503,
+            'El servidor ofrece pagos demo, pero esta version no permite simularlos.');
       }
-      if (!mounted) return;
-      setState(() => message = 'Preparando pago...');
-      if (paymentMethod == 'TARJETA') {
-        final intent = await repository.createStripeIntent(orderId);
-        final payment = Map<String, dynamic>.from(intent['payment'] as Map);
-        paymentInfo = {...payment, 'simulation': intent['simulation'] == true};
-        if (intent['simulation'] != true) {
-          final publishableKey = intent['publishable_key'] as String? ?? '';
-          final clientSecret = intent['client_secret'] as String? ?? '';
-          if (publishableKey.isEmpty || clientSecret.isEmpty) {
-            throw ApiException(503, 'Stripe no devolvió datos de autorización.');
-          }
+      if (intent['simulation'] != true) {
+        final publishableKey = intent['publishable_key'] as String? ?? '';
+        final clientSecret = intent['client_secret'] as String? ?? '';
+        if (publishableKey.isEmpty || clientSecret.isEmpty) {
+          throw ApiException(503, 'Stripe no devolvió datos de autorización.');
+        }
+        try {
           await _stripePaymentSheet.pay(
             publishableKey: publishableKey,
             paymentIntentClientSecret: clientSecret,
           );
-          paymentInfo = await repository.payment(orderId);
-          message = paymentInfo?['estado'] == 'PAGADO'
-              ? 'Stripe confirmó el pago.'
-              : 'Autorización enviada. Esperando confirmación del proveedor.';
-        } else {
-          message = 'Pago simulado de desarrollo. No se realizó un cobro bancario.';
+        } on StripeException catch (error) {
+          final canceled = error.error.code == FailureCode.Canceled;
+          message = canceled
+              ? 'Pago cancelado. El pedido sigue pendiente y puedes reintentarlo.'
+              : (error.error.localizedMessage ??
+                  error.error.message ??
+                  'Stripe no pudo completar la autorizacion. El pedido sigue pendiente.');
+          if (mounted) setState(() {});
+          return;
         }
+        await _refreshStripePaymentStatus(orderId);
+      } else {
+        message =
+            'Pago simulado de desarrollo. No se realizó un cobro bancario.';
+      }
+      if (mounted) setState(() {});
+      return;
+    }
+    if (paymentMethod == 'QR') {
+      final response = await repository.createQrPayment(orderId);
+      paymentInfo = {
+        ...Map<String, dynamic>.from(response['payment'] as Map),
+        'qr_payload': response['qr_payload'],
+        'simulation': response['simulation'] == true,
+      };
+      message = 'QR de demostración. No representa un pago bancario.';
+    } else {
+      paymentInfo = await repository.preparePayment(orderId, paymentMethod);
+    }
+    if (paymentInfo!['estado'] != 'PENDIENTE') {
+      message = _paymentStatusMessage(
+          paymentInfo!['estado'] as String? ?? 'PENDIENTE');
+      await load();
+      return;
+    }
+    _qrForOrder(order['id_pedido'] as int);
+    message = 'Pago listo. Revisa los datos y confirma la operación.';
+  }
+
+  Future<void> _refreshStripePaymentStatus(int orderId) async {
+    for (var attempt = 0; attempt < 15; attempt++) {
+      final status = await repository.paymentStatus(orderId);
+      paymentInfo = Map<String, dynamic>.from(status['payment'] as Map);
+      final orderStatus = status['order_status'] as String?;
+      if (selectedOrder != null && orderStatus != null) {
+        selectedOrder!['estado'] = orderStatus;
+      }
+      final paymentStatus = paymentInfo!['estado'] as String?;
+      if (paymentStatus != 'PENDIENTE' && paymentStatus != 'PROCESANDO') {
+        message = paymentStatus == 'PAGADO'
+            ? 'Pago aprobado por Stripe.'
+            : 'Stripe no aprobó el pago. Puedes volver a intentarlo.';
         if (mounted) setState(() {});
         return;
       }
-      if (paymentMethod == 'QR') {
-        final response = await repository.createQrPayment(orderId);
-        paymentInfo = {
-          ...Map<String, dynamic>.from(response['payment'] as Map),
-          'qr_payload': response['qr_payload'],
-          'simulation': response['simulation'] == true,
-        };
-        message = 'QR de demostración. No representa un pago bancario.';
-      } else {
-        paymentInfo = await repository.preparePayment(orderId, paymentMethod);
-      }
-      if (paymentInfo!['estado'] != 'PENDIENTE') {
-        message = _paymentStatusMessage(
-            paymentInfo!['estado'] as String? ?? 'PENDIENTE');
-        await load();
-        return;
-      }
-      _qrForOrder(order['id_pedido'] as int);
-      message = 'Pago listo. Revisa los datos y confirma la operación.';
-    });
+      if (attempt < 14) await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    message = 'Stripe recibió la autorización. El servidor sigue verificando '
+        'el pago; el pedido seguirá pendiente hasta su confirmación.';
+    if (mounted) setState(() {});
   }
 
   void _validateCard() {
@@ -2047,8 +2251,7 @@ class _ClientHomeState extends State<ClientHome> {
       final response = await repository.api.request(
           'POST', '/api/experience/fashion-assistant', {'mensaje': query});
       if (response is! Map) {
-        throw ApiException(
-            0, 'El asistente no devolvió una respuesta válida.');
+        throw ApiException(0, 'El asistente no devolvió una respuesta válida.');
       }
       final data = Map<String, dynamic>.from(response);
       final filters = _assistantCatalogFilters(query);
@@ -2157,14 +2360,17 @@ class _ClientHomeState extends State<ClientHome> {
     final maximum = double.tryParse(priceMaximum.text.trim());
     if (priceMinimum.text.trim().isNotEmpty &&
         (minimum == null || minimum < 0)) {
-      throw ApiException(
-          0, 'El precio mínimo debe ser un número válido.');
+      throw ApiException(0, 'El precio mínimo debe ser un número válido.');
     }
     if (priceMaximum.text.trim().isNotEmpty &&
         (maximum == null ||
             maximum < 0 ||
             (minimum != null && maximum < minimum))) {
       throw ApiException(0, 'El precio máximo debe ser mayor al mínimo.');
+    }
+    if (!await _hasInternetAccess()) {
+      throw ApiException(
+          0, 'Necesitas conexión para guardar los cambios del perfil.');
     }
     await _saveLocalPreferences();
     await repository.updateProfile({
@@ -2195,6 +2401,27 @@ class _ClientHomeState extends State<ClientHome> {
       ..['precio_minimo'] = priceMinimum.text.trim()
       ..['precio_maximo'] = priceMaximum.text.trim();
   }
+
+  List<String> get _availableSizes => rows
+      .expand((row) => (row['variantes'] as List? ?? const []))
+      .map((variant) => (variant as Map)['talla']?.toString() ?? '')
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+  List<String> get _availableColors => rows
+      .expand((row) => (row['variantes'] as List? ?? const []))
+      .map((variant) => (variant as Map)['color']?.toString() ?? '')
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+  List<String> get _availableCategories => rows
+      .map((row) => (row['categoria'] as Map?)?['nombre']?.toString() ?? '')
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
 
   Widget field(String label, TextEditingController controller,
           {bool secret = false,
@@ -2228,7 +2455,7 @@ class _ClientHomeState extends State<ClientHome> {
       padding: const EdgeInsets.all(24),
       child: Text(text, textAlign: TextAlign.center));
   Widget filters({bool withSearch = true}) => ExpansionTile(
-          initiallyExpanded: true,
+          initiallyExpanded: false,
           title: const Text('Buscar y filtrar'),
           tilePadding: EdgeInsets.zero,
           children: [
@@ -2366,8 +2593,7 @@ class _ClientHomeState extends State<ClientHome> {
     }
     for (var i = 0; i < digits.length; i += 4) {
       final end = min(i + 4, digits.length);
-      groups.add(
-          i < digits.length - 4 ? '••••' : digits.substring(i, end));
+      groups.add(i < digits.length - 4 ? '••••' : digits.substring(i, end));
     }
     return groups.join('  ');
   }
@@ -2390,8 +2616,7 @@ class _ClientHomeState extends State<ClientHome> {
               child: field('CVV', cardCvv,
                   keyboard: TextInputType.number, limit: 4, secret: true))
         ]),
-        const Text(
-            'Datos simulados: no se almacenan ni se envían al servidor.',
+        const Text('Datos simulados: no se almacenan ni se envían al servidor.',
             style: TextStyle(fontSize: 12))
       ]);
 
@@ -2400,7 +2625,8 @@ class _ClientHomeState extends State<ClientHome> {
     final orderId = selectedOrder?['id_pedido'];
     final token = info['qr_payload'] as String?;
     if (token == null || info['simulation'] != true) {
-      return const Card(child: Padding(
+      return const Card(
+          child: Padding(
         padding: EdgeInsets.all(16),
         child: Text('El proveedor bancario QR no está configurado. El pedido '
             'permanece pendiente y no se considera pagado.'),
@@ -2473,9 +2699,13 @@ class _ClientHomeState extends State<ClientHome> {
       if (status == 'PENDIENTE') ...[
         const SizedBox(height: 14),
         if (paymentMethod == 'QR') _qrPaymentCard(),
-        if (paymentMethod == 'TARJETA' && ApiConfig.paymentDemo && info['simulated'] == true) _cardPaymentForm(),
+        if (paymentMethod == 'TARJETA' &&
+            ApiConfig.paymentDemo &&
+            info['simulated'] == true)
+          _cardPaymentForm(),
         if (paymentMethod == 'TARJETA' && info['simulated'] != true)
-          const Text('La autorización se procesa mediante Stripe PaymentSheet. No se guardan datos de tarjeta.'),
+          const Text(
+              'La autorización se procesa mediante Stripe PaymentSheet. No se guardan datos de tarjeta.'),
         const SizedBox(height: 8),
         if (ApiConfig.paymentDemo && info['simulated'] == true)
           Row(children: [
@@ -2542,23 +2772,21 @@ class _ClientHomeState extends State<ClientHome> {
             const Text('Preferencias de estilo',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             DropdownButtonFormField<String>(
-                initialValue: preferredSize.isEmpty ? null : preferredSize,
+                initialValue: _availableSizes.contains(preferredSize)
+                    ? preferredSize
+                    : null,
                 decoration: const InputDecoration(labelText: 'Talla habitual'),
                 items: [
-                  for (final size in ['XS', 'S', 'M', 'L', 'XL', 'XXL'])
+                  for (final size in _availableSizes)
                     DropdownMenuItem(value: size, child: Text(size))
                 ],
                 onChanged: busy
                     ? null
                     : (value) => setState(() => preferredSize = value ?? '')),
             _preferenceChoices(
-                'Colores preferidos',
-                ['Negro', 'Blanco', 'Azul', 'Verde', 'Rojo', 'Gris'],
-                preferredColors),
-            _preferenceChoices(
-                'Tipos de prendas favoritas',
-                ['Camisas', 'Pantalones', 'Chaquetas', 'Poleras', 'Vestidos'],
-                preferredGarments),
+                'Colores preferidos', _availableColors, preferredColors),
+            _preferenceChoices('Tipos de prendas favoritas',
+                _availableCategories, preferredGarments),
             _stylePreferenceChoices(),
             if (preferredStyle.isNotEmpty)
               TextButton(
@@ -2767,7 +2995,7 @@ class _ClientHomeState extends State<ClientHome> {
             )),
           Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                   color: const Color(0xff153f33),
                   borderRadius: BorderRadius.circular(22)),
@@ -2784,7 +3012,7 @@ class _ClientHomeState extends State<ClientHome> {
                     Text('Encuentra tu\npróxima prenda.',
                         style: TextStyle(
                             color: Colors.white,
-                            fontSize: 30,
+                            fontSize: 24,
                             height: 1.05,
                             fontFamily: 'serif')),
                     SizedBox(height: 12),
@@ -2794,33 +3022,74 @@ class _ClientHomeState extends State<ClientHome> {
                   ])),
           const SizedBox(height: 12),
           filters(),
-          for (final r in rows)
-            Card(
-                child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    leading: imageUrl(r).isEmpty
-                        ? Container(
-                            width: 48,
-                            height: 58,
-                            decoration: BoxDecoration(
-                                color: const Color(0xffe1e9e2),
-                                borderRadius: BorderRadius.circular(12)),
-                            child: const Icon(Icons.checkroom,
-                                color: Color(0xff0d5848)))
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(imageUrl(r),
-                                width: 48,
-                                height: 58,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const Icon(Icons.checkroom))),
-                    title: Text(r['nombre']),
-                    subtitle: Text(
-                        '${r['categoria']['nombre']} · Bs ${r['precio_base']}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: busy ? null : () => run(() => detail(r)))),
+          if (rows.isNotEmpty)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rows.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: .67),
+              itemBuilder: (context, index) {
+                final r = rows[index];
+                final categoryName =
+                    (r['categoria'] as Map?)?['nombre'] ?? 'Prenda';
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  margin: EdgeInsets.zero,
+                  child: InkWell(
+                    onTap: busy ? null : () => run(() => detail(r)),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                              child: Container(
+                            width: double.infinity,
+                            color: const Color(0xfff1f3ef),
+                            padding: const EdgeInsets.all(8),
+                            child: imageUrl(r).isEmpty
+                                ? const Icon(Icons.checkroom,
+                                    size: 56, color: Color(0xff0d5848))
+                                : Image.network(imageUrl(r),
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.checkroom,
+                                        size: 56,
+                                        color: Color(0xff0d5848))),
+                          )),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(categoryName.toString(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                              color: const Color(0xff567066))),
+                                  Text(r['nombre']?.toString() ?? 'Prenda',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      'Bs ${r['precio_base'] ?? r['precio'] ?? '?'}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xff9b6c18))),
+                                ]),
+                          ),
+                        ]),
+                  ),
+                );
+              },
+            ),
           if (rows.isEmpty && !busy && !failed)
             empty('No hay prendas para estos filtros.')
         ];
@@ -2923,7 +3192,19 @@ class _ClientHomeState extends State<ClientHome> {
                     padding: const EdgeInsets.all(12),
                     child: Column(children: [
                       ListTile(
-                          title: Text(i['producto']),
+                          leading: i['imagen_url'] == null
+                              ? const Icon(Icons.checkroom)
+                              : SizedBox(
+                                  width: 52,
+                                  height: 64,
+                                  child: Image.network(
+                                      imageUrl(
+                                          Map<String, dynamic>.from(i as Map)),
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) =>
+                                          const Icon(Icons.checkroom))),
+                          title: Text(i['producto'] ?? 'Prenda',
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
                           subtitle: Text(
                               '${i['talla']} · ${i['color']} · Bs ${i['precio_unitario']} × ${i['cantidad']}')),
                       Wrap(children: [
@@ -2946,10 +3227,28 @@ class _ClientHomeState extends State<ClientHome> {
                         })
                       ])
                     ]))),
-          if (items.isEmpty && !busy && !failed)
-            empty('Tu carrito está vacío.'),
-          Text('Total: Bs ${cart['total'] ?? '0.00'}',
-              style: Theme.of(context).textTheme.titleLarge),
+          if (items.isEmpty && !busy && !failed) ...[
+            const SizedBox(height: 28),
+            const Icon(Icons.shopping_bag_outlined,
+                size: 64, color: Color(0xff7d9188)),
+            empty(
+                'Tu carrito est? vac?o. Explora el cat?logo y guarda tus prendas favoritas aqu?.'),
+            button('Volver al cat?logo', () => go('Cat?logo')),
+          ],
+          if (items.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Subtotal'),
+              Text('Bs ${cart['total'] ?? '0.00'}'),
+            ]),
+            const SizedBox(height: 6),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Text('Total',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Bs ${cart['total'] ?? '0.00'}',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ]),
+          ],
           if (items.isNotEmpty) ...[
             const SizedBox(height: 20),
             paymentPicker(),
@@ -2973,8 +3272,7 @@ class _ClientHomeState extends State<ClientHome> {
                     subtitle: Text('Bs ${o['total']} · ${o['fecha_pedido']}'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: busy ? null : () => run(() => openOrder(o)))),
-          if (rows.isEmpty && !busy && !failed)
-            empty('Todavía no hay pedidos.')
+          if (rows.isEmpty && !busy && !failed) empty('Todavía no hay pedidos.')
         ];
       case 'Pedido':
         final o = selectedOrder!;
@@ -3292,8 +3590,8 @@ class _ClientHomeState extends State<ClientHome> {
                   for (final i in availability)
                     DropdownMenuItem(
                         value: i['id_inventario'] as int,
-                        child: Text(
-                            '${i['sucursal']} · stock ${i['disponible']}'))
+                        child:
+                            Text('${i['sucursal']} · stock ${i['disponible']}'))
                 ],
                 onChanged:
                     busy ? null : (v) => setState(() => inventoryId = v)),
@@ -3338,22 +3636,29 @@ class _ClientHomeState extends State<ClientHome> {
       case 'Perfil':
         return [
           Text(profileEmail, style: Theme.of(context).textTheme.titleMedium),
-          if (loyaltySnapshot != null && loyaltySnapshot!['program'] != null) ...[
+          if (loyaltySnapshot != null &&
+              loyaltySnapshot!['program'] != null) ...[
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Mis puntos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const Text('Mis puntos',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold)),
                     Text('${loyaltySnapshot!['balance']} puntos disponibles'),
                     if (loyaltySnapshot!['tier'] != null)
                       Text('Nivel ${loyaltySnapshot!['tier']['name']}'),
                     if (loyaltySnapshot!['next_tier'] != null)
-                      Text('Te faltan ${loyaltySnapshot!['next_tier']['minimum_points'] - loyaltySnapshot!['balance']} puntos para ${loyaltySnapshot!['next_tier']['name']}.'),
+                      Text(
+                          'Te faltan ${loyaltySnapshot!['next_tier']['minimum_points'] - loyaltySnapshot!['balance']} puntos para ${loyaltySnapshot!['next_tier']['name']}.'),
                     const SizedBox(height: 8),
-                    const Text('Los puntos se acreditan cuando la compra queda confirmada.'),
-                    for (final movement in (loyaltySnapshot!['movements'] as List? ?? const []).take(10))
+                    const Text(
+                        'Los puntos se acreditan cuando la compra queda confirmada.'),
+                    for (final movement
+                        in (loyaltySnapshot!['movements'] as List? ?? const [])
+                            .take(10))
                       ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
@@ -3364,7 +3669,11 @@ class _ClientHomeState extends State<ClientHome> {
                           'EXPIRACION' => 'Puntos vencidos',
                           _ => movement['kind'].toString(),
                         }),
-                        subtitle: Text(DateTime.tryParse(movement['created_at'] ?? '')?.toLocal().toString() ?? ''),
+                        subtitle: Text(
+                            DateTime.tryParse(movement['created_at'] ?? '')
+                                    ?.toLocal()
+                                    .toString() ??
+                                ''),
                         trailing: Text('${movement['points']} pts'),
                       ),
                   ],
@@ -3441,8 +3750,7 @@ class _ClientHomeState extends State<ClientHome> {
         ]),
         ExpansionTile(title: const Text('Conexión al servidor'), children: [
           field('Dirección de API', server, keyboard: TextInputType.url),
-          const Text(
-              'En emulador Android: http://10.0.2.2:8000. En un teléfono, usa la IP local del servidor.')
+          const Text('La aplicación usa HTTPS con la API de FashionStore.')
         ])
       ];
 

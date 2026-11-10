@@ -133,8 +133,8 @@ def test_failed_payment_can_be_retried_without_duplicating_charge(db):
     client.post('/api/cart/items',headers=customer,json={'id_variante':inv.id_variante,'cantidad':1})
     order = client.post('/api/orders',headers=customer).json()
     request = {'id_pedido':order['id_pedido'],'metodo_pago':'QR'}
-    payment = client.post('/api/payments',headers=customer,json=request).json()
+    payment = client.post('/api/payments/qr',headers=customer,json=request).json()['payment']
     assert client.put(f"/api/payments/{payment['id_pago']}/reject",headers=customer).status_code == 200
-    retry = client.post('/api/payments',headers=customer,json=request)
-    assert retry.status_code == 200 and retry.json()['id_pago'] == payment['id_pago']
+    retry = client.post('/api/payments/qr',headers=customer,json=request)
+    assert retry.status_code == 200 and retry.json()['payment']['id_pago'] == payment['id_pago']
     assert client.put(f"/api/payments/{payment['id_pago']}/approve",headers=customer).status_code == 200

@@ -19,9 +19,10 @@ type Adjustment = { id: number; exchange_id: number; amount: string; currency: s
       <p>Estado financiero de tu organización. El importe de devolución lo calcula el servidor.</p>
       <p *ngIf="error" role="alert">{{ error }}</p>
       <button type="button" (click)="load()" [disabled]="loading">Actualizar</button>
+      <p *ngIf="notice" role="status">{{ notice }}</p>
       <h2>Pagos pendientes o que requieren revisión</h2>
-      <table><thead><tr><th>Pedido</th><th>Método</th><th>Importe</th><th>Estado</th><th>Proveedor</th><th>Referencia</th></tr></thead>
-        <tbody><tr *ngFor="let p of payments"><td>{{p['id_pedido']}}</td><td>{{p['metodo_pago']}}</td><td>{{p['monto']}} {{p['currency']}}</td><td>{{p['estado']}}</td><td>{{p['simulated'] ? 'Simulado' : (p['proveedor'] || '—')}}</td><td>{{p['referencia_externa'] || '—'}}</td></tr></tbody>
+      <table><thead><tr><th>Pedido</th><th>Método</th><th>Importe</th><th>Estado</th><th>Proveedor</th><th>Referencia</th><th>Acción</th></tr></thead>
+        <tbody><tr *ngFor="let p of payments"><td>{{p['id_pedido']}}</td><td>{{p['metodo_pago']}}</td><td>{{p['monto']}} {{p['currency']}}</td><td>{{p['estado']}}</td><td>{{p['simulated'] ? 'Simulado' : (p['proveedor'] || '—')}}</td><td>{{p['referencia_externa'] || '—'}}</td><td><ng-container *ngIf="canResolveSimulation(p)"><button type="button" (click)="resolveSimulation(p, true)" [disabled]="loading">Aprobar simulación</button><button type="button" (click)="resolveSimulation(p, false)" [disabled]="loading">Rechazar simulación</button></ng-container></td></tr></tbody>
       </table>
       <h2>Historial de pagos</h2>
       <table><thead><tr><th>Pedido</th><th>Método</th><th>Importe</th><th>Estado</th><th>Proveedor</th><th>Referencia</th></tr></thead>
@@ -52,6 +53,7 @@ export class FinancialReconciliationComponent implements OnInit {
   private readonly api = inject(ApiService);
   loading = false;
   error = '';
+  notice = '';
   payments: Array<Record<string, any>> = [];
   paymentHistory: Array<Record<string, any>> = [];
   refunds: Refund[] = [];
@@ -62,11 +64,24 @@ export class FinancialReconciliationComponent implements OnInit {
   };
 
   ngOnInit(): void { this.load(); }
+  canResolveSimulation(payment: Record<string, any>): boolean {
+    return payment['simulated'] === true && ['PENDIENTE', 'PROCESANDO'].includes(payment['estado']);
+  }
   load(): void {
     this.loading = true; this.error = '';
     this.api.get<{ payments: Array<Record<string, any>>; payment_history: Array<Record<string, any>>; refunds: Refund[]; adjustments: Adjustment[] }>('/api/payments/reconciliation').subscribe({
       next: result => { this.payments = result.payments; this.paymentHistory = result.payment_history ?? []; this.refunds = result.refunds; this.adjustments = result.adjustments ?? []; this.loading = false; },
       error: err => { this.error = err?.error?.detail ?? 'No se pudieron consultar las operaciones financieras.'; this.loading = false; }
+    });
+  }
+  resolveSimulation(payment: Record<string, any>, approved: boolean): void {
+    if (!this.canResolveSimulation(payment) || this.loading) return;
+    const decision = approved ? 'aprobar' : 'rechazar';
+    if (!window.confirm(`¿Confirmas ${decision} el pago simulado del pedido #${payment['id_pedido']}?`)) return;
+    this.loading = true; this.error = ''; this.notice = '';
+    this.api.put(`/api/payments/reconciliation/${payment['id_pago']}/simulate`, { approved }).subscribe({
+      next: () => { this.notice = approved ? 'Pago simulado aprobado.' : 'Pago simulado rechazado.'; this.load(); },
+      error: err => { this.error = err?.error?.detail ?? 'No se pudo resolver el pago simulado.'; this.loading = false; }
     });
   }
   requestRefund(): void {

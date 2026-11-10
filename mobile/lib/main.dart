@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'features/client_app.dart';
 import 'services/client_repository.dart';
+import 'services/catalog_offline_store.dart';
+import 'services/reservation_offline_store.dart';
 import 'services/session_store.dart';
 import 'services/reservation_background_sync.dart';
+import 'services/stripe_payment_sheet_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,9 +16,18 @@ Future<void> main() async {
 }
 
 class VestidorVirtualApp extends StatelessWidget {
-  const VestidorVirtualApp({super.key, this.repository, this.sessionStore});
+  const VestidorVirtualApp(
+      {super.key,
+      this.repository,
+      this.sessionStore,
+      this.catalogStore,
+      this.reservationStore,
+      this.stripePaymentSheet});
   final ClientRepository? repository;
   final SessionStore? sessionStore;
+  final CatalogOfflineStore? catalogStore;
+  final ReservationOfflineStore? reservationStore;
+  final StripePaymentSheetService? stripePaymentSheet;
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -28,8 +40,11 @@ class VestidorVirtualApp extends StatelessWidget {
             scaffoldBackgroundColor: const Color(0xfff4f3ee),
             textTheme: ThemeData.light().textTheme.copyWith(
                 headlineSmall: const TextStyle(
-                    fontFamily: 'serif', fontWeight: FontWeight.w600, color: Color(0xff1c2c27)),
-                titleLarge: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xff1c2c27))),
+                    fontFamily: 'serif',
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xff1c2c27)),
+                titleLarge: const TextStyle(
+                    fontWeight: FontWeight.w700, color: Color(0xff1c2c27))),
             cardTheme: CardThemeData(
                 elevation: 0,
                 color: const Color(0xfffffdf8),
@@ -40,14 +55,31 @@ class VestidorVirtualApp extends StatelessWidget {
             inputDecorationTheme: InputDecorationTheme(
                 filled: true,
                 fillColor: const Color(0xfffffdf8),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xffcbd6d0))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xff0d5848), width: 2))),
-            appBarTheme: const AppBarTheme(centerTitle: false, backgroundColor: Color(0xfffffdf8), foregroundColor: Color(0xff1c2c27), elevation: 0),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xffcbd6d0))),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide:
+                        const BorderSide(color: Color(0xff0d5848), width: 2))),
+            appBarTheme: const AppBarTheme(
+                centerTitle: false,
+                backgroundColor: Color(0xfffffdf8),
+                foregroundColor: Color(0xff1c2c27),
+                elevation: 0),
             navigationBarTheme: NavigationBarThemeData(
                 indicatorColor: const Color(0xffd8e9df),
-                labelTextStyle: WidgetStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)))),
-        home: ClientHome(repository: repository, sessionStore: sessionStore),
+                labelTextStyle: WidgetStateProperty.all(const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 12)))),
+        home: ClientHome(
+            repository: repository,
+            sessionStore: sessionStore,
+            catalogStore: catalogStore,
+            reservationStore: reservationStore,
+            stripePaymentSheet: stripePaymentSheet),
       );
 }

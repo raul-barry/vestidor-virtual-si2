@@ -6,7 +6,7 @@ from app.models.plan import Plan, PlanCaracteristica
 
 
 def test_seed_creates_three_plans_and_feature_matrix_idempotently(db):
-    assert seed_commercial_plans(db) == 42
+    assert seed_commercial_plans(db) == 43
     db.commit()
 
     plans = {plan.codigo: plan for plan in db.scalars(select(Plan)).all()}
@@ -14,7 +14,7 @@ def test_seed_creates_three_plans_and_feature_matrix_idempotently(db):
     assert plans["ESTILO"].max_sucursales == 2
     assert plans["MODA"].max_sucursales == 10
     assert plans["GLAMOUR"].max_sucursales is None
-    assert [len(plans[code].caracteristicas) for code in ("ESTILO", "MODA", "GLAMOUR")] == [8, 13, 18]
+    assert [len(plans[code].caracteristicas) for code in ("ESTILO", "MODA", "GLAMOUR")] == [8, 13, 19]
     assert "reportes_ia" not in {feature.codigo for feature in plans["ESTILO"].caracteristicas}
     assert "reportes_ia" in {feature.codigo for feature in plans["MODA"].caracteristicas}
     assert "reportes_ia" in {feature.codigo for feature in plans["GLAMOUR"].caracteristicas}
@@ -29,7 +29,7 @@ def test_seed_creates_three_plans_and_feature_matrix_idempotently(db):
     assert seed_commercial_plans(db) == 0
     db.commit()
     assert db.scalar(select(func.count()).select_from(Plan)) == 3
-    assert db.scalar(select(func.count()).select_from(PlanCaracteristica)) == 39
+    assert db.scalar(select(func.count()).select_from(PlanCaracteristica)) == 40
     db.refresh(plans["MODA"])
     db.refresh(moda_catalog)
     assert plans["MODA"].max_sucursales == 12

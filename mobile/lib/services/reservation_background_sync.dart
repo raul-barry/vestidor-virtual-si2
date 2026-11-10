@@ -9,18 +9,10 @@ import 'catalog_offline_store.dart';
 import 'client_session.dart';
 import 'reservation_offline_store.dart';
 import 'session_store.dart';
+import 'offline_sync_protocol.dart';
 
 const _reservationSyncTask = 'fashionstore.reservation_outbox_sync';
 const _reservationSyncWorkName = 'fashionstore-reservation-outbox-sync';
-const _backgroundOperationTypes = {
-  'reserva.crear',
-  'reserva.cancelar',
-  'venta.crear',
-  'cambio.solicitar',
-  'cambio.registrar_offline',
-  'pago.solicitar'
-};
-
 typedef BackgroundInternetCheck = Future<bool> Function(String server);
 typedef LimitedBatchSender = Future<dynamic> Function(String server,
     String limitedCredential, List<Map<String, dynamic>> operations);
@@ -74,7 +66,7 @@ class ReservationBackgroundSyncRunner {
         final operations = await _outbox.claimPending(
           scope,
           ownerUserId: userId,
-          operationTypes: _backgroundOperationTypes,
+          operationTypes: clientOutboxOperationTypes,
         );
         if (operations.isEmpty) {
           if (await _outbox.hasSending(scope, ownerUserId: userId))
@@ -226,8 +218,7 @@ class ReservationBackgroundSyncRunner {
           .startsWith('reserva.')) {
         await _reservations.reconcile(operation, null, status, message);
       } else if (operation['operation_type'] == 'pago.solicitar') {
-        await _reservations.reconcilePayment(
-            operation, null, status, message);
+        await _reservations.reconcilePayment(operation, null, status, message);
       }
     }
   }
@@ -239,7 +230,7 @@ class ReservationBackgroundSyncRunner {
     final api = ApiClient(timeout: const Duration(seconds: 5))
       ..baseUrl = server;
     try {
-      final response = await api.request('GET', '/api/health');
+      final response = await api.request('GET', '/health');
       return response is Map && response['status'] == 'ok';
     } catch (_) {
       return false;
@@ -254,8 +245,8 @@ class ReservationBackgroundSyncRunner {
       ..baseUrl = server
       ..token = credential;
     try {
-      return await api
-          .request('POST', '/api/sync/batch', {'operations': operations});
+      return await api.request('POST', '/api/sync/batch',
+          {'operations': OfflineSyncProtocol.toWireOperations(operations)});
     } finally {
       api.dispose();
     }

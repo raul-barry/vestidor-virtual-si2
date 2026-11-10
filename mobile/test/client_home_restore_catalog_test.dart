@@ -42,30 +42,36 @@ class _TracingCatalogStore extends CatalogOfflineStore {
   Future<List<Map<String, dynamic>>> listOutbox(String scope,
       {int? ownerUserId}) {
     outboxReadScopes.add('$scope:$ownerUserId');
-    return super.listOutbox(scope, ownerUserId: ownerUserId);
+    return Future.value(<Map<String, dynamic>>[]);
   }
 
   @override
   Future<int?> getLastSync(String scope) {
     syncReadScopes.add(scope);
-    return super.getLastSync(scope);
+    return Future.value(null);
   }
 
   @override
+  Future<void> recoverSending(String scope,
+      {int? ownerUserId,
+      Duration staleAfter = const Duration(minutes: 5)}) async {}
+
+  @override
   Future<void> save(String scope, List<Map<String, dynamic>> products) async {
-    await super.save(scope, products);
     savedCatalogScopes.add(scope);
     if (!catalogSaved.isCompleted) catalogSaved.complete();
   }
 }
 
 String _clientJwt() {
-  final payload = base64Url.encode(utf8.encode(jsonEncode({
+  final payload = base64Url
+      .encode(utf8.encode(jsonEncode({
         'rol': 'CLIENTE',
         'id_organizacion': 1,
         'id_usuario': 7,
         'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
-      }))).replaceAll('=', '');
+      })))
+      .replaceAll('=', '');
   return 'header.$payload.signature';
 }
 
@@ -131,7 +137,8 @@ void main() {
         catalogStore: catalogStore,
       ),
     ));
-    await tester.pumpAndSettle();
+    // Await the observable catalog cache write on the real async event loop;
+    // pumpAndSettle cannot complete SQLite FFI work under fake async.
     await tester.runAsync(() => catalogStore.catalogSaved.future.timeout(
           const Duration(seconds: 10),
           onTimeout: () => throw TimeoutException(
@@ -147,8 +154,10 @@ void main() {
     expect(requests.map((request) => request.url.path),
         containsAll(['/api/users/profile', '/api/catalog/products']));
     expect(
-      requests.singleWhere(
-          (request) => request.url.path == '/api/catalog/products').url.query,
+      requests
+          .singleWhere((request) => request.url.path == '/api/catalog/products')
+          .url
+          .query,
       isEmpty,
       reason: 'Authenticated catalog requests are scoped by the JWT tenant.',
     );

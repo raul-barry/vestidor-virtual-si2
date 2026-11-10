@@ -22,7 +22,9 @@ class PaymentService:
             raise AppException("Cliente no encontrado", status_code=404)
         return cliente.id_cliente
 
-    def create_payment(self, request: CreatePaymentRequest, id_cliente: int | None = None) -> PaymentResponse:
+    def create_payment(
+        self, request: CreatePaymentRequest, id_cliente: int | None = None, *, commit: bool = True
+    ) -> PaymentResponse:
         order = self.repository.get_order_by_id(request.id_pedido)
         if order is None:
             raise AppException("Pedido no encontrado", status_code=404)
@@ -53,7 +55,10 @@ class PaymentService:
                 existing.proveedor = None
                 existing.referencia_externa = None
                 existing.evento_externo = None
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(existing)
 
         try:
@@ -62,14 +67,19 @@ class PaymentService:
                 idempotency_key=str(request.operation_uuid) if request.operation_uuid else None,
                 currency=settings.stripe_currency.upper(),
             )
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
-            self.repository.db.rollback()
+            if commit:
+                self.repository.db.rollback()
             raise AppException("No se pudo crear el pago", status_code=500) from exc
 
     def approve_payment(
-        self, id_pago: int, id_cliente: int | None = None, *, allow_retry_from_failed: bool = False
+        self, id_pago: int, id_cliente: int | None = None, *,
+        allow_retry_from_failed: bool = False, commit: bool = True,
     ) -> PaymentResponse:
         payment = self._get_approvable_payment(id_pago, allow_retry_from_failed=allow_retry_from_failed)
         order = self.repository.get_order_by_id(payment.id_pedido)
@@ -87,13 +97,19 @@ class PaymentService:
             if organization_id is not None:
                 from app.services.loyalty_service import LoyaltyService
                 LoyaltyService(self.repository.db, organization_id).accrue_for_order(order.id_pedido)
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
-            self.repository.db.rollback()
+            if commit:
+                self.repository.db.rollback()
             raise AppException("No se pudo aprobar el pago", status_code=500) from exc
 
-    def reject_payment(self, id_pago: int, id_cliente: int | None = None) -> PaymentResponse:
+    def reject_payment(
+        self, id_pago: int, id_cliente: int | None = None, *, commit: bool = True,
+    ) -> PaymentResponse:
         payment = self._get_approvable_payment(id_pago)
         order = self.repository.get_order_by_id(payment.id_pedido)
         if order is None:
@@ -103,10 +119,14 @@ class PaymentService:
             self.repository.update_payment_status(payment, "FALLIDO")
             order.estado = "PENDIENTE"
             release_order_stock(self.repository.db, order, reason=f"Pago {payment.id_pago} rechazado")
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
-            self.repository.db.rollback()
+            if commit:
+                self.repository.db.rollback()
             raise AppException("No se pudo rechazar el pago", status_code=500) from exc
 
     def get_payment(self, id_pedido: int, id_cliente: int | None = None) -> PaymentResponse:
@@ -119,7 +139,10 @@ class PaymentService:
         self._ensure_order_owner(order, id_cliente)
         return self._to_response(payment)
 
-    def create_stripe_payment(self, id_pedido: int, id_cliente: int | None, intent: dict, *, simulated: bool = False) -> PaymentResponse:
+    def create_stripe_payment(
+        self, id_pedido: int, id_cliente: int | None, intent: dict, *,
+        simulated: bool = False, commit: bool = True,
+    ) -> PaymentResponse:
         provider_name = "STRIPE_SIMULADO" if simulated else "STRIPE"
         order = self.repository.get_order_by_id(id_pedido)
         if order is None:
@@ -139,7 +162,10 @@ class PaymentService:
                 existing.currency = settings.stripe_currency.upper()
                 existing.referencia_externa = intent["id"]
                 existing.evento_externo = None
-                self.repository.db.commit()
+                if commit:
+                    self.repository.db.commit()
+                else:
+                    self.repository.db.flush()
             return self._to_response(existing)
         if existing:
             existing.metodo_pago = "TARJETA"
@@ -149,20 +175,27 @@ class PaymentService:
             existing.referencia_externa = intent["id"]
             existing.evento_externo = None
             existing.estado = "PENDIENTE"
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(existing)
         try:
             payment = self.repository.create_payment(
                 id_pedido, "TARJETA", order.total, proveedor=provider_name, referencia_externa=intent["id"],
                 simulated=simulated, currency=settings.stripe_currency.upper(),
             )
-            self.repository.db.commit()
+            if commit:
+                self.repository.db.commit()
+            else:
+                self.repository.db.flush()
             return self._to_response(payment)
         except SQLAlchemyError as exc:
-            self.repository.db.rollback()
+            if commit:
+                self.repository.db.rollback()
             raise AppException("No se pudo registrar el pago Stripe", status_code=500) from exc
 
-    def attach_demo_qr_reference(self, id_pago: int, reference: str) -> PaymentResponse:
+    def attach_demo_qr_reference(self, id_pago: int, reference: str, *, commit: bool = True) -> PaymentResponse:
         """Marks the generic QR as a demo-only Stripe transaction reference."""
         payment = self.repository.get_payment_by_id(id_pago)
         if payment is None:
@@ -171,7 +204,10 @@ class PaymentService:
         payment.referencia_externa = reference
         payment.simulated = True
         payment.currency = settings.stripe_currency.upper()
-        self.repository.db.commit()
+        if commit:
+            self.repository.db.commit()
+        else:
+            self.repository.db.flush()
         return self._to_response(payment)
 
     def _get_approvable_payment(self, id_pago: int, *, allow_retry_from_failed: bool = False) -> Pago:

@@ -34,6 +34,10 @@ class StripeIntentRequest(BaseModel):
     id_pedido: int
 
 
+class SimulatePaymentRequest(BaseModel):
+    approved: bool
+
+
 class StripeIntentResponse(BaseModel):
     client_secret: str
     publishable_key: str

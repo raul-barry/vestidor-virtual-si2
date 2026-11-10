@@ -27,6 +27,37 @@ void main() {
     expect(await store.read('availability:org:4:22'), isEmpty);
   });
 
+  test('cart lines survive closing and reopening local SQLite storage',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('cu26-cart-store-');
+    addTearDown(() => directory.delete(recursive: true));
+    final path = '${directory.path}${Platform.pathSeparator}cart.db';
+    final first = ReservationOfflineStore(
+        factory: databaseFactoryFfi, databasePath: path);
+    const key = 'sales:cart:org:4:21';
+    await first.save(key, [
+      {
+        'id_detalle': -1,
+        'id_variante': 2,
+        'producto': 'Camisa Oxford',
+        'talla': 'M',
+        'color': 'Azul',
+        'cantidad': 2,
+        'precio_unitario': '100.00',
+        'pending_offline': true,
+      }
+    ]);
+    await first.close();
+    final reopened = ReservationOfflineStore(
+        factory: databaseFactoryFfi, databasePath: path);
+    addTearDown(reopened.close);
+
+    final restored = (await reopened.read(key)).single;
+    expect(restored['id_variante'], 2);
+    expect(restored['cantidad'], 2);
+    expect(restored['pending_offline'], isTrue);
+  });
+
   test('reconciles pending payment only inside its organization and user scope',
       () async {
     final store = ReservationOfflineStore(factory: databaseFactoryFfi);
@@ -53,7 +84,8 @@ void main() {
     final saved = (await store.orders('org:4', 21)).single;
     expect(saved['payment_sync_status'], 'SINCRONIZADA');
     expect(saved['payment_sync_message'], contains('Falta autorizar'));
-    expect((await store.orders('org:5', 21)).single['payment_sync_status'], isNull);
+    expect((await store.orders('org:5', 21)).single['payment_sync_status'],
+        isNull);
   });
 
   test(

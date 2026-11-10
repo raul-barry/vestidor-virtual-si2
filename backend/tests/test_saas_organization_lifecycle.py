@@ -17,7 +17,7 @@ def _headers(db, organization_id: int, role_name: str = "ADMINISTRADOR") -> dict
         db.add(role)
         db.flush()
     user = Usuario(
-        id_organizacion=organization_id,
+        id_organizacion=None if role_name == "ADMINISTRADOR_PLATAFORMA" else organization_id,
         id_rol=role.id_rol,
         nombres="Admin",
         apellidos="Empresa" if role_name == "ADMINISTRADOR" else "Plataforma",

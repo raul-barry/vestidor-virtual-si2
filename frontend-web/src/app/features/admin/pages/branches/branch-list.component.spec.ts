@@ -7,27 +7,27 @@ import { BranchAdminService } from '../../services/branch-admin.service';
 
 describe('BranchListComponent', () => {
   let service: jasmine.SpyObj<BranchAdminService>;
-  let dialog: jasmine.SpyObj<MatDialog>;
   let snack: jasmine.SpyObj<MatSnackBar>;
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<BranchAdminService>('BranchAdminService', ['list', 'create', 'update', 'toggleStatus', 'delete']);
     service.list.and.returnValue(of([]));
-    dialog = jasmine.createSpyObj<MatDialog>('MatDialog', ['open']);
-    snack = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
     await TestBed.configureTestingModule({
       imports: [BranchListComponent],
       providers: [
         { provide: BranchAdminService, useValue: service },
-        { provide: MatDialog, useValue: dialog },
-        { provide: MatSnackBar, useValue: snack },
       ],
     }).compileComponents();
   });
 
   function openCreateForm() {
-    dialog.open.and.returnValue({ afterClosed: () => of({ nombre: 'Sucursal nueva', direccion: 'Calle 1', ciudad: 'La Paz' }) } as never);
     const fixture = TestBed.createComponent(BranchListComponent);
+    const dialog = fixture.debugElement.injector.get(MatDialog);
+    snack = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
+    spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open').and.callFake(snack.open);
+    spyOn(dialog, 'open').and.returnValue({
+      afterClosed: () => of({ nombre: 'Sucursal nueva', direccion: 'Calle 1', ciudad: 'La Paz' }),
+    } as never);
     fixture.detectChanges();
     fixture.componentInstance.openForm();
     return fixture;

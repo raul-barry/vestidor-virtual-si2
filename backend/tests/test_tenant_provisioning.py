@@ -15,6 +15,9 @@ from app.services.tenant_provisioning_service import TenantProvisioningService
 
 
 def _platform_headers(db):
+    # A SaaS platform administrator has no tenant scope; the fixture defaults
+    # ordinary records to organization 1 unless that context is cleared.
+    db.info.pop("organization_id", None)
     role = db.scalar(select(Rol).where(Rol.nombre == "ADMINISTRADOR_PLATAFORMA"))
     if role is None:
         role = Rol(nombre="ADMINISTRADOR_PLATAFORMA", estado="ACTIVO")
@@ -23,7 +26,7 @@ def _platform_headers(db):
     admin_role = db.scalar(select(Rol).where(Rol.nombre == "ADMINISTRADOR"))
     if admin_role is None:
         db.add(Rol(nombre="ADMINISTRADOR", estado="ACTIVO"))
-    user = Usuario(id_organizacion=1, id_rol=role.id_rol, nombres="Platform", apellidos="Admin",
+    user = Usuario(id_organizacion=None, id_rol=role.id_rol, nombres="Platform", apellidos="Admin",
                    correo="provision-platform@example.test", password_hash="hash", estado="ACTIVO")
     db.add(user)
     db.commit()
